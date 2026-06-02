@@ -317,81 +317,6 @@
       background: #fff;
     }
 
-    .schedule-day-wrap {
-      overflow: auto;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      max-height: 68vh;
-      background: #fff;
-    }
-
-    .day-calendar-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-      background: var(--surface-strong);
-      font-weight: 900;
-    }
-
-    .day-calendar {
-      display: grid;
-      grid-template-columns: 72px minmax(760px, 1fr);
-      min-width: 860px;
-    }
-
-    .day-time-column,
-    .day-events-column {
-      position: relative;
-      min-height: 1248px;
-    }
-
-    .day-time-column {
-      border-right: 1px solid var(--line);
-      background: #fff;
-    }
-
-    .day-hour-label,
-    .day-hour-row {
-      height: 52px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .day-hour-label {
-      padding: 4px 8px 0 0;
-      text-align: right;
-      color: var(--muted);
-      font-size: 0.76rem;
-      font-weight: 800;
-    }
-
-    .day-hour-row {
-      background: linear-gradient(to bottom, #fff, #fff 50%, #f8fafc 50%, #f8fafc);
-    }
-
-    .day-event {
-      position: absolute;
-      min-height: 30px;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      padding: 6px 7px;
-      overflow: hidden;
-      font-size: 0.78rem;
-      line-height: 1.3;
-      font-weight: 800;
-      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-    }
-
-    .day-event.movement-in {
-      border-color: rgba(15, 118, 110, 0.2);
-    }
-
-    .day-event.movement-out {
-      border-color: rgba(185, 28, 28, 0.2);
-    }
-
     .nurse-option-unavailable {
       color: #92400e;
       background: #fffbeb;
@@ -405,6 +330,10 @@
 
     .schedule-matrix.is-month-view {
       min-width: 1980px;
+    }
+
+    .schedule-matrix.is-day-view {
+      min-width: 760px;
     }
 
     .schedule-matrix th,
@@ -779,8 +708,8 @@
         <section class="panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title" id="schedule-title">日曆</div>
-              <div class="muted" id="schedule-description">依時間線顯示當日人員異動。</div>
+              <div class="panel-title" id="schedule-title">自適應日矩陣</div>
+              <div class="muted" id="schedule-description">依畫面寬度顯示合適天數，按日標示人力與異動。</div>
             </div>
           </div>
           <div class="panel-body">
@@ -790,13 +719,13 @@
                   <div class="field">
                     <label for="schedule-view">檢視</label>
                     <select id="schedule-view">
-                      <option value="day">日</option>
-                      <option value="week">週曆</option>
-                      <option value="month">月曆</option>
+                      <option value="day">日矩陣</option>
+                      <option value="week">週矩陣</option>
+                      <option value="month">月矩陣</option>
                     </select>
                   </div>
                   <div class="field">
-                    <label for="schedule-date">日期</label>
+                    <label for="schedule-date">起始日期</label>
                     <input id="schedule-date" type="date">
                   </div>
                   <div class="schedule-nav">
@@ -804,17 +733,16 @@
                     <button class="btn btn-ghost" type="button" id="schedule-next-day">後一天</button>
                   </div>
                   <button class="btn btn-ghost" type="button" id="schedule-today">今天</button>
-                  <div class="field">
+                  <div class="field schedule-control-year">
                     <label for="schedule-year">年度</label>
                     <input id="schedule-year" type="number" min="2020" max="2100" step="1">
                   </div>
-                  <button class="btn btn-ghost" type="button" id="schedule-year-load">載入年度</button>
+                  <button class="btn btn-ghost schedule-control-year" type="button" id="schedule-year-load">載入年度</button>
                   <button class="btn btn-ghost" type="button" id="print-schedule-btn">列印矩陣</button>
                 </div>
               </aside>
               <div class="schedule-main">
                 <div id="schedule-empty" class="empty hidden">目前沒有可產生日曆的駐站資料。</div>
-                <div id="schedule-day-wrap" class="schedule-day-wrap hidden"></div>
                 <div id="schedule-matrix-wrap" class="schedule-matrix-wrap hidden">
                   <table class="schedule-matrix" id="schedule-table">
                     <thead id="schedule-head"></thead>
@@ -897,12 +825,15 @@
       testMode: false,
       scheduleView: 'day',
       scheduleYear: new Date().getFullYear(),
-      scheduleDate: getTodayString()
+      scheduleDate: getTodayString(),
+      scheduleDayCount: 1
     };
 
     const FULL_SHIFT_BREAK_HOURS = 1;
     const FULL_SHIFT_BREAK_THRESHOLD_HOURS = 8;
-    const DAY_TIMELINE_HOUR_HEIGHT = 52;
+    const RESPONSIVE_DAY_MIN_WIDTH = 170;
+    const RESPONSIVE_DAY_MIN_COUNT = 1;
+    const RESPONSIVE_DAY_MAX_COUNT = 7;
 
     const SCHEDULE_STATION_RULES = [
       { label: '輔大', keywords: ['輔大', '輔仁', '輔仁大學', '輔大醫院', '輔仁大學附設醫院'] },
@@ -930,6 +861,7 @@
     ];
 
     const el = {};
+    let scheduleResizeTimer = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       bindElements();
@@ -938,11 +870,13 @@
       const today = getTodayString();
       state.scheduleYear = year;
       state.scheduleDate = today;
+      state.scheduleDayCount = getResponsiveDayCount();
       el.scheduleYear.value = year;
       el.scheduleDate.value = today;
+      updateScheduleControls();
       loadData({
-        dateFrom: `${year}-01-01`,
-        dateTo: `${year}-12-31`
+        dateFrom: today,
+        dateTo: getScheduleDayRangeEnd(today)
       });
     });
 
@@ -972,7 +906,6 @@
         'print-schedule-btn',
         'schedule-table',
         'schedule-empty',
-        'schedule-day-wrap',
         'schedule-matrix-wrap',
         'schedule-head',
         'schedule-body',
@@ -1015,7 +948,12 @@
       });
       el.scheduleView.addEventListener('change', () => {
         state.scheduleView = normalizeScheduleView(el.scheduleView.value);
-        renderScheduleMatrix();
+        updateScheduleControls();
+        if (state.scheduleView === 'day') {
+          setScheduleDate(state.scheduleDate);
+          return;
+        }
+        loadScheduleYear();
       });
       el.scheduleDate.addEventListener('change', () => setScheduleDate(el.scheduleDate.value));
       el.schedulePrevDay.addEventListener('click', () => setScheduleDate(addDaysToDateString(state.scheduleDate, -1)));
@@ -1023,8 +961,21 @@
       el.scheduleToday.addEventListener('click', () => setScheduleDate(getTodayString()));
       el.scheduleYearLoad.addEventListener('click', loadScheduleYear);
       el.printScheduleBtn.addEventListener('click', () => window.print());
-      el.filterDateFrom.addEventListener('change', () => loadData(collectFilters()));
-      el.filterDateTo.addEventListener('change', () => loadData(collectFilters()));
+      window.addEventListener('resize', scheduleResponsiveDayRefresh);
+      el.filterDateFrom.addEventListener('change', () => {
+        if (state.scheduleView === 'day') {
+          setScheduleDate(el.filterDateFrom.value || state.scheduleDate);
+          return;
+        }
+        loadData(collectFilters());
+      });
+      el.filterDateTo.addEventListener('change', () => {
+        if (state.scheduleView === 'day') {
+          setScheduleDate(el.filterDateFrom.value || state.scheduleDate);
+          return;
+        }
+        loadData(collectFilters());
+      });
       el.filterStation.addEventListener('change', () => {
         renderFilterNurseOptions();
         loadData(collectFilters());
@@ -1078,7 +1029,12 @@
       state.testMode = Boolean(state.viewer && state.viewer.testMode);
       state.scheduleYear = inferScheduleYear();
       state.scheduleView = normalizeScheduleView(state.scheduleView);
-      state.scheduleDate = normalizeDateInput(state.scheduleDate) || getDefaultDispatchDate();
+      state.scheduleDayCount = state.scheduleView === 'day'
+        ? getResponsiveDayCount()
+        : state.scheduleDayCount;
+      state.scheduleDate = state.scheduleView === 'day' && state.filters.dateFrom
+        ? normalizeDateInput(state.filters.dateFrom)
+        : (normalizeDateInput(state.scheduleDate) || getDefaultDispatchDate());
 
       el.viewerName.textContent = state.viewer.name || '未命名使用者';
       el.viewerEmail.textContent = [state.viewer.email || '', state.testMode ? '測試模式' : ''].filter(Boolean).join('｜');
@@ -1109,8 +1065,33 @@
       el.scheduleView.value = state.scheduleView;
       el.scheduleDate.value = state.scheduleDate;
       el.scheduleYear.value = state.scheduleYear;
+      updateScheduleControls();
       if (!el.dispatchStartDate.value) el.dispatchStartDate.value = getDefaultDispatchDate();
       if (!el.dispatchEndDate.value) el.dispatchEndDate.value = el.dispatchStartDate.value;
+      reconcileResponsiveDayRange();
+    }
+
+    function reconcileResponsiveDayRange() {
+      if (state.scheduleView !== 'day') return;
+      const nextCount = getResponsiveDayCount();
+      if (nextCount === state.scheduleDayCount) return;
+
+      state.scheduleDayCount = nextCount;
+      const rangeEnd = getScheduleDayRangeEnd(state.scheduleDate);
+      if (state.filters.dateFrom !== state.scheduleDate || state.filters.dateTo !== rangeEnd) {
+        el.filterDateFrom.value = state.scheduleDate;
+        el.filterDateTo.value = rangeEnd;
+        loadData(collectFilters());
+        return;
+      }
+      renderScheduleMatrix();
+    }
+
+    function updateScheduleControls() {
+      const isDayView = state.scheduleView === 'day';
+      document.querySelectorAll('.schedule-control-year').forEach((item) => {
+        item.classList.toggle('hidden', isDayView);
+      });
     }
 
     function renderTestModeControl() {
@@ -1218,27 +1199,21 @@
 
       if (!scheduleStations.length) {
         el.scheduleEmpty.classList.remove('hidden');
-        el.scheduleDayWrap.classList.add('hidden');
         el.scheduleMatrixWrap.classList.add('hidden');
         el.scheduleHead.innerHTML = '';
         el.scheduleBody.innerHTML = '';
-        el.scheduleDayWrap.innerHTML = '';
         return;
       }
 
       el.scheduleEmpty.classList.add('hidden');
-      el.scheduleTable.classList.toggle('is-month-view', state.scheduleView !== 'week');
+      el.scheduleTable.classList.toggle('is-month-view', state.scheduleView === 'month');
+      el.scheduleTable.classList.toggle('is-day-view', state.scheduleView === 'day');
+      el.scheduleMatrixWrap.classList.remove('hidden');
 
       if (state.scheduleView === 'day') {
-        el.scheduleMatrixWrap.classList.add('hidden');
-        el.scheduleDayWrap.classList.remove('hidden');
-        renderDailyScheduleTimeline(state.scheduleDate, scheduleStations);
+        renderDailyScheduleMatrix(state.scheduleDate, scheduleStations);
         return;
       }
-
-      el.scheduleDayWrap.classList.add('hidden');
-      el.scheduleDayWrap.innerHTML = '';
-      el.scheduleMatrixWrap.classList.remove('hidden');
 
       if (state.scheduleView === 'week') {
         renderWeeklyScheduleMatrix(year, scheduleStations);
@@ -1250,6 +1225,7 @@
 
     function renderMonthlyScheduleMatrix(year, scheduleStations) {
       const months = buildYearMonths(year);
+      el.scheduleTable.style.minWidth = '';
       el.scheduleTitle.textContent = '年度月曆';
       el.scheduleDescription.textContent = '依駐站與月份標示調入、調出與人數變化。';
       el.scheduleHead.innerHTML = `
@@ -1269,6 +1245,7 @@
 
     function renderWeeklyScheduleMatrix(year, scheduleStations) {
       const weeks = buildVisibleYearWeeks(year);
+      el.scheduleTable.style.minWidth = '';
       el.scheduleTitle.textContent = '年度週排程';
       el.scheduleDescription.textContent = year === new Date().getFullYear()
         ? '從本週開始，依駐站與週次標示調入、調出與人數變化。'
@@ -1293,125 +1270,31 @@
       }).join('');
     }
 
-    function renderDailyScheduleTimeline(dateString, scheduleStations) {
-      const date = normalizeDateInput(dateString) || getTodayString();
-      const events = buildDailyTimelineEvents(scheduleStations, date);
-      el.scheduleTitle.textContent = '日曆';
-      el.scheduleDescription.textContent = `${formatFullDate(date)} 依時間線顯示人員調入與調出。`;
-      el.scheduleHead.innerHTML = '';
-      el.scheduleBody.innerHTML = '';
-
-      const hourLabels = Array.from({ length: 24 }, (_, hour) => (
-        `<div class="day-hour-label">${String(hour).padStart(2, '0')}:00</div>`
-      )).join('');
-      const hourRows = Array.from({ length: 24 }, () => '<div class="day-hour-row"></div>').join('');
-      const laneCount = events[0] ? events[0].laneCount : 1;
-      const calendarMinWidth = Math.max(860, 72 + laneCount * 220);
-      const eventHtml = events.map((event) => {
-        const top = Math.max(0, event.startMinute / 60 * DAY_TIMELINE_HOUR_HEIGHT);
-        const height = Math.max(30, (event.endMinute - event.startMinute) / 60 * DAY_TIMELINE_HOUR_HEIGHT);
-        const width = 100 / event.laneCount;
-        const left = event.lane * width;
-        const style = [
-          `top:${top}px`,
-          `height:${height}px`,
-          `left:calc(${left}% + 10px)`,
-          `width:calc(${width}% - 14px)`
-        ].join(';');
-        return `
-          <div class="day-event ${event.className}" style="${style}">
-            <div>${escapeHtml(event.timeText)}｜${escapeHtml(event.direction)}｜${escapeHtml(event.nurseName)}</div>
-            <div class="cell-sub">${escapeHtml(event.stationLabel)}</div>
-            <div class="cell-sub">${escapeHtml(event.relatedText)}</div>
-          </div>
-        `;
-      }).join('');
-
-      el.scheduleDayWrap.innerHTML = `
-        <div class="day-calendar-head">
-          <div>${escapeHtml(formatFullDate(date))}</div>
-          <div class="muted">${escapeHtml(formatNumber(events.length))} 筆異動</div>
-        </div>
-        ${events.length ? `
-          <div class="day-calendar" style="min-width:${calendarMinWidth}px">
-            <div class="day-time-column">${hourLabels}</div>
-            <div class="day-events-column">${hourRows}${eventHtml}</div>
-          </div>
-        ` : '<div class="empty">此日沒有調派異動。</div>'}
+    function renderDailyScheduleMatrix(dateString, scheduleStations) {
+      const startDate = normalizeDateInput(dateString) || getTodayString();
+      const dates = buildVisibleDayDates(startDate);
+      const endDate = dates[dates.length - 1] || startDate;
+      el.scheduleTable.style.minWidth = `${190 + dates.length * RESPONSIVE_DAY_MIN_WIDTH}px`;
+      el.scheduleTitle.textContent = '自適應日矩陣';
+      el.scheduleDescription.textContent = `${formatFullDate(startDate)} 至 ${formatFullDate(endDate)}，依目前寬度顯示 ${formatNumber(dates.length)} 天。`;
+      el.scheduleHead.innerHTML = `
+        <tr>
+          <th>駐站</th>
+          ${dates.map((date) => `
+            <th>
+              <div>${escapeHtml(formatFullDate(date))}</div>
+              <div class="cell-sub">日</div>
+            </th>
+          `).join('')}
+        </tr>
       `;
-    }
-
-    function buildDailyTimelineEvents(scheduleStations, dateString) {
-      const stationByCode = new Map(scheduleStations.map((station) => [station.code, station]));
-      const sourceRecords = state.scheduleRecords.length ? state.scheduleRecords : state.records;
-      const events = [];
-
-      sourceRecords
-        .filter((record) => (
-          !isRecordNurseUnavailable(record)
-          && getTemporaryDispatchInfo(record).isTemporary
-          && recordOverlapsRange(record, dateString, dateString)
-        ))
-        .forEach((record) => {
-          if (stationByCode.has(record.stationCode)) {
-            events.push(buildDailyTimelineEvent(record, stationByCode.get(record.stationCode), 'in'));
-          }
-          if (stationByCode.has(record.originalStationCode)) {
-            events.push(buildDailyTimelineEvent(record, stationByCode.get(record.originalStationCode), 'out'));
-          }
-        });
-
-      return assignDailyEventLanes(events.filter(Boolean));
-    }
-
-    function buildDailyTimelineEvent(record, station, movementType) {
-      const range = getDailyEventTimeRange(record);
-      const isIncoming = movementType === 'in';
-      const stationLabel = station.scheduleLabel || station.name || station.code;
-      const relatedText = isIncoming
-        ? `原：${getScheduleRecordStationLabel(record, 'originalStationCode', 'originalStationName')}`
-        : `至：${getScheduleRecordStationLabel(record, 'stationCode', 'stationName')}`;
-      return {
-        startMinute: range.start,
-        endMinute: range.end,
-        direction: isIncoming ? '調入' : '調出',
-        className: isIncoming ? 'movement-in' : 'movement-out',
-        stationLabel,
-        relatedText,
-        nurseName: record.nurseName || record.nurseEmail || '',
-        timeText: formatMinuteRange(range.start, range.end)
-      };
-    }
-
-    function assignDailyEventLanes(events) {
-      const sorted = events
-        .sort((a, b) => a.startMinute - b.startMinute || a.endMinute - b.endMinute || String(a.nurseName).localeCompare(String(b.nurseName), 'zh-Hant'));
-      const laneEnds = [];
-      sorted.forEach((event) => {
-        let lane = laneEnds.findIndex((endMinute) => endMinute <= event.startMinute);
-        if (lane < 0) {
-          lane = laneEnds.length;
-          laneEnds.push(0);
-        }
-        event.lane = lane;
-        laneEnds[lane] = event.endMinute;
-      });
-      const laneCount = Math.max(1, laneEnds.length);
-      sorted.forEach((event) => {
-        event.laneCount = laneCount;
-      });
-      return sorted;
-    }
-
-    function getDailyEventTimeRange(record) {
-      const startTime = String(record && record.startTime || '').trim();
-      const endTime = String(record && record.endTime || '').trim();
-      let start = startTime ? timeToMinutes(startTime) : 8 * 60;
-      let end = endTime ? timeToMinutes(endTime) : start + 60;
-      if (end <= start) end += 24 * 60;
-      start = Math.max(0, Math.min(24 * 60 - 15, start));
-      end = Math.max(start + 15, Math.min(24 * 60, end));
-      return { start, end };
+      el.scheduleBody.innerHTML = scheduleStations.map((station) => {
+        const cells = dates.map((date) => {
+          const cell = buildDailyScheduleCellData(station, date);
+          return `<td class="schedule-cell ${cell.className}">${cell.html}</td>`;
+        }).join('');
+        return buildScheduleStationRowHtml(station, cells);
+      }).join('');
     }
 
     function buildScheduleStationRowHtml(station, cells) {
@@ -1432,6 +1315,31 @@
           ${cells}
         </tr>
       `;
+    }
+
+    function buildDailyScheduleCellData(station, dateString) {
+      const stationCode = station.code;
+      const baseCount = Number(station.memberCount || 0);
+      const movements = getDailyMovementRecords(stationCode, dateString);
+      const incomingKeys = new Set();
+      const outgoingKeys = new Set();
+
+      movements.forEach((record) => {
+        if (record.stationCode === stationCode) incomingKeys.add(record.assignmentKey);
+        if (record.originalStationCode === stationCode) outgoingKeys.add(record.assignmentKey);
+      });
+
+      const adjustedCount = Math.max(0, baseCount - outgoingKeys.size + incomingKeys.size);
+      const className = buildScheduleCellClassName(adjustedCount, movements.length);
+      const countText = baseCount === adjustedCount
+        ? `人數 ${formatNumber(baseCount)}`
+        : `人數 ${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
+      const movementHtml = buildGroupedMovementEntriesHtml(movements, stationCode, dateString, dateString);
+
+      return {
+        className,
+        html: `<div class="schedule-count">${escapeHtml(countText)}</div>${movementHtml}`
+      };
     }
 
     function buildMonthlyScheduleCellData(station, month) {
@@ -1576,6 +1484,24 @@
       return Array.from(map.values());
     }
 
+    function getDailyMovementRecords(stationCode, dateString) {
+      const map = new Map();
+      const sourceRecords = state.scheduleRecords.length ? state.scheduleRecords : state.records;
+      sourceRecords
+        .filter((record) => {
+          const temporaryInfo = getTemporaryDispatchInfo(record);
+          return !isRecordNurseUnavailable(record)
+            && temporaryInfo.isTemporary
+            && recordOverlapsRange(record, dateString, dateString)
+            && (record.stationCode === stationCode || record.originalStationCode === stationCode);
+        })
+        .sort((a, b) => String(getRecordStartDate(a)).localeCompare(String(getRecordStartDate(b))))
+        .forEach((record) => {
+          map.set(`${record.id || record.assignmentKey}:${record.stationCode}:${record.originalStationCode}`, record);
+        });
+      return Array.from(map.values());
+    }
+
     function getWeeklyMovementRecords(stationCode, week) {
       const map = new Map();
       const sourceRecords = state.scheduleRecords.length ? state.scheduleRecords : state.records;
@@ -1673,20 +1599,68 @@
       loadData(collectFilters());
     }
 
+    function buildVisibleDayDates(startDate) {
+      const normalizedStart = normalizeDateInput(startDate) || getTodayString();
+      const count = Math.max(RESPONSIVE_DAY_MIN_COUNT, Number(state.scheduleDayCount || 1));
+      return Array.from({ length: count }, (_, index) => addDaysToDateString(normalizedStart, index));
+    }
+
+    function getScheduleDayRangeEnd(startDate) {
+      return addDaysToDateString(startDate, Math.max(1, Number(state.scheduleDayCount || 1)) - 1);
+    }
+
+    function getResponsiveDayCount() {
+      const wrapperWidth = el.scheduleMatrixWrap
+        ? Math.floor(el.scheduleMatrixWrap.getBoundingClientRect().width || 0)
+        : 0;
+      const fallbackWidth = Math.max(320, Number(window.innerWidth || 1024) - (window.innerWidth >= 980 ? 700 : 48));
+      const availableWidth = Math.max(0, (wrapperWidth || fallbackWidth) - 190);
+      const count = Math.floor(availableWidth / RESPONSIVE_DAY_MIN_WIDTH);
+      return Math.max(RESPONSIVE_DAY_MIN_COUNT, Math.min(RESPONSIVE_DAY_MAX_COUNT, count || 1));
+    }
+
+    function scheduleResponsiveDayRefresh() {
+      if (state.scheduleView !== 'day') return;
+      window.clearTimeout(scheduleResizeTimer);
+      scheduleResizeTimer = window.setTimeout(() => {
+        const nextCount = getResponsiveDayCount();
+        if (nextCount === state.scheduleDayCount) return;
+        state.scheduleDayCount = nextCount;
+        setScheduleDate(state.scheduleDate);
+      }, 180);
+    }
+
     function setScheduleDate(value) {
       const normalizedDate = normalizeDateInput(value) || getTodayString();
       const year = Number(normalizedDate.slice(0, 4));
-      const needsReload = year !== Number(state.scheduleYear)
+      const previousYear = Number(state.scheduleYear || year);
+      state.scheduleDate = normalizedDate;
+      state.scheduleYear = year;
+      state.scheduleDayCount = getResponsiveDayCount();
+      el.scheduleDate.value = normalizedDate;
+      el.scheduleYear.value = year;
+
+      if (state.scheduleView === 'day') {
+        const rangeEnd = getScheduleDayRangeEnd(normalizedDate);
+        const isAlreadyLoaded = state.filters.dateFrom === normalizedDate
+          && state.filters.dateTo === rangeEnd;
+        el.filterDateFrom.value = normalizedDate;
+        el.filterDateTo.value = rangeEnd;
+        if (isAlreadyLoaded) {
+          renderScheduleMatrix();
+          return;
+        }
+        loadData(collectFilters());
+        return;
+      }
+
+      const needsReload = year !== previousYear
         || !state.filters.dateFrom
         || !state.filters.dateTo
         || normalizedDate < state.filters.dateFrom
         || normalizedDate > state.filters.dateTo;
 
-      state.scheduleDate = normalizedDate;
-      el.scheduleDate.value = normalizedDate;
       if (needsReload) {
-        state.scheduleYear = year;
-        el.scheduleYear.value = year;
         el.filterDateFrom.value = `${year}-01-01`;
         el.filterDateTo.value = `${year}-12-31`;
         loadData(collectFilters());
@@ -1961,17 +1935,6 @@
       const date = new Date(`${dateString}T00:00:00+08:00`);
       const weekday = Number.isNaN(date.getTime()) ? '' : `（週${labels[date.getDay()]}）`;
       return `${dateString}${weekday}`;
-    }
-
-    function formatMinuteRange(startMinute, endMinute) {
-      return `${minutesToTime(startMinute)}-${minutesToTime(endMinute)}`;
-    }
-
-    function minutesToTime(minutes) {
-      const normalized = Math.max(0, Math.min(24 * 60, Number(minutes || 0)));
-      const hour = Math.floor(normalized / 60);
-      const minute = Math.round(normalized % 60);
-      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
     }
 
     function getRecordStartDate(record) {
