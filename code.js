@@ -9,6 +9,9 @@ const APP_CONFIG = {
   maxRecords: 3000,
   defaultRangeDays: 31,
   maxHoursPerRecord: 24,
+  fullShiftBreakHours: 1,
+  fullShiftBreakThresholdHours: 8,
+  unavailableStatusKeywords: ['育嬰', '留停', '留職停薪', '停薪', '留職', '停職', '休職'],
   shiftOptions: ['日班', '上午', '下午', '夜班', '支援', '其他']
 };
 
@@ -58,13 +61,17 @@ function getDispatchAppData(payload) {
       testMode: Boolean(payload && payload.testMode)
     });
     const allowedStationCodes = new Set(context.stations.map((station) => station.code));
-    const records = loadDispatchRecords_(allowedStationCodes, filters);
+    const assignmentAvailabilityByKey = buildAssignmentAvailabilityByKey_(source.assignments);
+    const records = loadDispatchRecords_(allowedStationCodes, filters, {
+      assignmentAvailabilityByKey
+    });
     const scheduleRecords = loadDispatchRecords_(allowedStationCodes, {
       ...filters,
       stationCode: '',
       nurseEmail: ''
     }, {
-      includeOriginalStation: true
+      includeOriginalStation: true,
+      assignmentAvailabilityByKey
     });
     const today = getTodayDateString_();
     const currentRecords = loadDispatchRecords_(allowedStationCodes, {
@@ -73,7 +80,8 @@ function getDispatchAppData(payload) {
       stationCode: '',
       nurseEmail: ''
     }, {
-      includeOriginalStation: true
+      includeOriginalStation: true,
+      assignmentAvailabilityByKey
     });
 
     return {
@@ -228,7 +236,7 @@ function deleteWorkHourDispatch(payload) {
 
 function loadDispatchSource_() {
   const spreadsheet = getDispatchSourceSpreadsheet_();
-  const personnelSheet = getSheetByNameOrNull_(spreadsheet, getEnvString_('DISPATCH_PERSONNEL_SHEET_NAME', APP_CONFIG.personnelSheetName));
+  const personnelSheet = getPersonnelSheet_(spreadsheet);
   const assignmentSheet = getAssignmentSheet_(spreadsheet);
   const orgSheet = getSheetByNameOrNull_(spreadsheet, getEnvString_('DISPATCH_ORG_SHEET_NAME', APP_CONFIG.orgSheetName));
   const personnel = personnelSheet ? readPersonnelRecords_(personnelSheet) : [];
@@ -319,6 +327,15 @@ function getAssignmentSheet_(spreadsheet) {
   throw new Error('找不到包含「信箱」與「所屬組別代碼」欄位的人員職務配置工作表。');
 }
 
+function getPersonnelSheet_(spreadsheet) {
+  const gidSheet = getSheetByGidOrNull_(
+    spreadsheet,
+    Number(getEnvString_('DISPATCH_PERSONNEL_SHEET_GID', '0'))
+  );
+  if (gidSheet) return gidSheet;
+  return getSheetByNameOrNull_(spreadsheet, getEnvString_('DISPATCH_PERSONNEL_SHEET_NAME', APP_CONFIG.personnelSheetName));
+}
+
 function readPersonnelRecords_(sheet) {
   const values = sheet.getDataRange().getDisplayValues();
   if (values.length < 2) return [];
@@ -349,6 +366,7 @@ function readAssignmentRecords_(sheet, personnelByEmail) {
   const titleIndex = findHeaderIndex_(headers, FIELD_ALIASES.title, 4);
   const managerEmailIndex = findHeaderIndex_(headers, FIELD_ALIASES.managerEmail, 5);
   const managerNameIndex = findHeaderIndex_(headers, FIELD_ALIASES.managerName, 6);
+  const statusIndex = findHeaderIndex_(headers, FIELD_ALIASES.status);
   const temporaryDispatchIndex = findHeaderIndex_(headers, FIELD_ALIASES.temporaryDispatch);
 
   return values.slice(1)
@@ -357,6 +375,7 @@ function readAssignmentRecords_(sheet, personnelByEmail) {
       const orgCode = normalizeOrgCode_(row[orgCodeIndex]);
       const person = personnelByEmail.get(email) || {};
       const name = String(row[nameIndex] || person.name || '').trim();
+      const status = String((statusIndex >= 0 ? row[statusIndex] : '') || person.status || '').trim();
 
       return {
         rowIndex: index + 2,
@@ -366,6 +385,8 @@ function readAssignmentRecords_(sheet, personnelByEmail) {
         orgCode,
         orgName: String(row[orgNameIndex] || '').trim(),
         title: String(row[titleIndex] || '').trim(),
+        status,
+        isUnavailable: isUnavailableStatus_(status),
         managerEmail: normalizeEmail_(row[managerEmailIndex]),
         managerName: String(row[managerNameIndex] || '').trim(),
         temporaryDispatch: temporaryDispatchIndex >= 0 ? String(row[temporaryDispatchIndex] || '').trim() : ''
@@ -466,7 +487,7 @@ function buildDispatchContext_(source, viewerEmail, options) {
   }
 
   stationByCode.forEach((station) => {
-    station.members = stationAssignments
+    const nurseAssignments = stationAssignments
       .filter((assignment) => assignment.orgCode === station.code && isNurseAssignment_(assignment))
       .sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email), 'zh-Hant'))
       .map((assignment) => ({
@@ -474,10 +495,16 @@ function buildDispatchContext_(source, viewerEmail, options) {
         email: assignment.email,
         name: assignment.name,
         title: assignment.title,
+        status: assignment.status || '',
+        isUnavailable: Boolean(assignment.isUnavailable),
+        availabilityLabel: getAvailabilityLabel_(assignment),
         orgCode: assignment.orgCode,
         orgName: assignment.orgName || station.name
       }));
+    station.members = nurseAssignments.filter((assignment) => !assignment.isUnavailable);
+    station.unavailableMembers = nurseAssignments.filter((assignment) => assignment.isUnavailable);
     station.memberCount = station.members.length;
+    station.unavailableMemberCount = station.unavailableMembers.length;
   });
 
   const managedStationCodes = new Set();
@@ -509,6 +536,9 @@ function buildDispatchContext_(source, viewerEmail, options) {
         email: assignment.email,
         name: assignment.name,
         title: assignment.title,
+        status: assignment.status || '',
+        isUnavailable: Boolean(assignment.isUnavailable),
+        availabilityLabel: getAvailabilityLabel_(assignment),
         orgCode: assignment.orgCode,
         orgName: assignment.orgName || station.name || assignment.orgCode
       };
@@ -534,6 +564,7 @@ function buildDispatchContext_(source, viewerEmail, options) {
         managerEmail: normalizeEmail_(station.managerEmail),
         managerName: station.managerName || '',
         memberCount: Number(station.memberCount || 0),
+        unavailableMemberCount: Number(station.unavailableMemberCount || 0),
         members: station.members || []
       })),
     nurses: visibleNurses
@@ -541,6 +572,9 @@ function buildDispatchContext_(source, viewerEmail, options) {
 }
 
 function compareNurses_(a, b) {
+  if (Boolean(a.isUnavailable) !== Boolean(b.isUnavailable)) {
+    return a.isUnavailable ? 1 : -1;
+  }
   const nameCompare = String(a.name || a.email).localeCompare(String(b.name || b.email), 'zh-Hant');
   if (nameCompare !== 0) return nameCompare;
   const orgCompare = String(a.orgName || a.orgCode).localeCompare(String(b.orgName || b.orgCode), 'zh-Hant');
@@ -560,6 +594,17 @@ function dedupeAssignments_(assignments) {
 function isNurseAssignment_(assignment) {
   const title = String(assignment.title || '').trim();
   return title === '收案人員';
+}
+
+function isUnavailableStatus_(status) {
+  const normalized = String(status || '').replace(/\s+/g, '');
+  if (!normalized || normalized === '在職' || normalized === '正常') return false;
+  return APP_CONFIG.unavailableStatusKeywords.some((keyword) => normalized.indexOf(keyword) >= 0);
+}
+
+function getAvailabilityLabel_(assignment) {
+  if (!assignment || !assignment.isUnavailable) return '';
+  return assignment.status ? `${assignment.status}，不可調配` : '不可調配';
 }
 
 function isStationManagerAssignment_(assignment) {
@@ -628,6 +673,9 @@ function normalizeWorkHourPayload_(payload, context, viewerEmail) {
   if (!member) {
     throw new Error('找不到可調派的護理師配置。');
   }
+  if (member.isUnavailable) {
+    throw new Error(`${member.name || member.email} 目前狀態為「${member.status || '不可調配'}」，不得調派。`);
+  }
 
   const startTime = normalizeTime_(payload.startTime);
   const endTime = normalizeTime_(payload.endTime);
@@ -695,7 +743,30 @@ function loadDispatchRecords_(allowedStationCodes, filters, options) {
       if (filters.dateTo && record.startDate > filters.dateTo) return false;
       return true;
     })
+    .map((record) => applyDispatchRecordAvailability_(record, options && options.assignmentAvailabilityByKey))
     .sort(compareDispatchRecords_);
+}
+
+function buildAssignmentAvailabilityByKey_(assignments) {
+  const map = new Map();
+  (Array.isArray(assignments) ? assignments : []).forEach((assignment) => {
+    if (!assignment || !assignment.assignmentKey || map.has(assignment.assignmentKey)) return;
+    map.set(assignment.assignmentKey, {
+      status: assignment.status || '',
+      isUnavailable: Boolean(assignment.isUnavailable)
+    });
+  });
+  return map;
+}
+
+function applyDispatchRecordAvailability_(record, assignmentAvailabilityByKey) {
+  const availability = assignmentAvailabilityByKey && assignmentAvailabilityByKey.get(record.assignmentKey);
+  if (!availability) return record;
+  return {
+    ...record,
+    nurseStatus: availability.status || '',
+    isNurseUnavailable: Boolean(availability.isUnavailable)
+  };
 }
 
 function assertNoOverlappingNurseDispatch_(target, records) {
@@ -818,6 +889,11 @@ function normalizeStoredDispatchRecord_(record) {
   const endDate = rawEndDate < startDate ? startDate : rawEndDate;
   if (!record.id || !startDate || !endDate || !stationCode || !nurseEmail || !assignmentKey) return null;
 
+  const dispatchDays = Number(record.dispatchDays || countDateRangeDays_(startDate, endDate));
+  const startTime = String(record.startTime || '').trim();
+  const endTime = String(record.endTime || '').trim();
+  const hours = normalizeStoredHours_(record.hours, startTime, endTime);
+
   return {
     id: String(record.id || '').trim(),
     workDate: startDate,
@@ -832,12 +908,12 @@ function normalizeStoredDispatchRecord_(record) {
     originalStationCode: normalizeOrgCode_(record.originalStationCode || stationCode),
     originalStationName: String(record.originalStationName || record.stationName || stationCode).trim(),
     temporaryDispatchLabel: String(record.temporaryDispatchLabel || '').trim(),
-    dispatchDays: Number(record.dispatchDays || countDateRangeDays_(startDate, endDate)),
-    dispatchTotalHours: Number(record.dispatchTotalHours || calculateDispatchTotalHours_(Number(record.hours || 0), countDateRangeDays_(startDate, endDate))),
+    dispatchDays,
+    dispatchTotalHours: calculateDispatchTotalHours_(hours, dispatchDays),
     shiftName: String(record.shiftName || '日班').trim(),
-    startTime: String(record.startTime || '').trim(),
-    endTime: String(record.endTime || '').trim(),
-    hours: Number(record.hours || 0),
+    startTime,
+    endTime,
+    hours,
     note: String(record.note || '').trim(),
     createdAt: String(record.createdAt || '').trim(),
     createdBy: normalizeEmail_(record.createdBy),
@@ -953,9 +1029,13 @@ function normalizeTime_(value) {
 function normalizeHours_(value, startTime, endTime) {
   const raw = String(value === null || typeof value === 'undefined' ? '' : value).trim();
   let hours = raw ? Number(raw) : 0;
+  const grossHours = startTime && endTime ? calculateGrossHoursFromTime_(startTime, endTime) : 0;
+  const workHours = applyBreakDeduction_(grossHours);
 
   if (!hours && startTime && endTime) {
-    hours = calculateHoursFromTime_(startTime, endTime);
+    hours = workHours;
+  } else if (hours && grossHours && Math.abs(hours - grossHours) < 0.01) {
+    hours = workHours;
   }
 
   if (!Number.isFinite(hours) || hours <= 0) {
@@ -969,10 +1049,34 @@ function normalizeHours_(value, startTime, endTime) {
 }
 
 function calculateHoursFromTime_(startTime, endTime) {
+  return applyBreakDeduction_(calculateGrossHoursFromTime_(startTime, endTime));
+}
+
+function calculateGrossHoursFromTime_(startTime, endTime) {
   const start = timeToMinutes_(startTime);
   let end = timeToMinutes_(endTime);
   if (end <= start) end += 24 * 60;
   return Math.round(((end - start) / 60) * 100) / 100;
+}
+
+function normalizeStoredHours_(value, startTime, endTime) {
+  const hours = Number(value || 0);
+  const grossHours = startTime && endTime ? calculateGrossHoursFromTime_(startTime, endTime) : 0;
+  const workHours = applyBreakDeduction_(grossHours);
+  if (Number.isFinite(hours) && hours > 0) {
+    if (grossHours && Math.abs(hours - grossHours) < 0.01) return workHours;
+    return Math.round(hours * 100) / 100;
+  }
+  return workHours;
+}
+
+function applyBreakDeduction_(hours) {
+  const normalized = Number(hours || 0);
+  if (!Number.isFinite(normalized) || normalized <= 0) return 0;
+  const adjusted = normalized > APP_CONFIG.fullShiftBreakThresholdHours
+    ? normalized - APP_CONFIG.fullShiftBreakHours
+    : normalized;
+  return Math.round(Math.max(0, adjusted) * 100) / 100;
 }
 
 function countDateRangeDays_(startDate, endDate) {
