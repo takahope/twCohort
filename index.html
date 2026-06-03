@@ -163,6 +163,126 @@
       white-space: nowrap;
     }
 
+    .fairness-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .fairness-stat {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 12px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .fairness-stat strong {
+      color: var(--primary-strong);
+      font-size: 1.35rem;
+      line-height: 1;
+    }
+
+    .fairness-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .fairness-table-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: visible;
+      background: #fff;
+    }
+
+    .fairness-table-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-strong);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .fairness-table-title {
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .fairness-table-wrap {
+      overflow-x: auto;
+      max-height: none;
+    }
+
+    .fairness-table-wrap table {
+      table-layout: auto;
+      min-width: 620px;
+    }
+
+    .fairness-table-wrap th,
+    .fairness-table-wrap td {
+      white-space: normal;
+    }
+
+    .fairness-table-wrap .cell-main,
+    .fairness-table-wrap .cell-sub,
+    .fairness-table-wrap .station-label {
+      overflow-wrap: anywhere;
+    }
+
+    .fairness-station-table th:nth-child(1),
+    .fairness-station-table td:nth-child(1) {
+      width: 40%;
+      min-width: 220px;
+    }
+
+    .fairness-station-table th:nth-child(2),
+    .fairness-station-table td:nth-child(2),
+    .fairness-station-table th:nth-child(3),
+    .fairness-station-table td:nth-child(3),
+    .fairness-station-table th:nth-child(4),
+    .fairness-station-table td:nth-child(4) {
+      width: 16%;
+      min-width: 86px;
+    }
+
+    .fairness-station-table th:nth-child(5),
+    .fairness-station-table td:nth-child(5) {
+      width: 12%;
+      min-width: 76px;
+    }
+
+    .fairness-nurse-table th:nth-child(1),
+    .fairness-nurse-table td:nth-child(1) {
+      width: 28%;
+      min-width: 170px;
+    }
+
+    .fairness-nurse-table th:nth-child(2),
+    .fairness-nurse-table td:nth-child(2) {
+      width: 32%;
+      min-width: 220px;
+    }
+
+    .fairness-nurse-table th:nth-child(3),
+    .fairness-nurse-table td:nth-child(3),
+    .fairness-nurse-table th:nth-child(4),
+    .fairness-nurse-table td:nth-child(4) {
+      width: 8%;
+      min-width: 62px;
+    }
+
+    .fairness-nurse-table th:nth-child(5),
+    .fairness-nurse-table td:nth-child(5) {
+      width: 24%;
+      min-width: 130px;
+    }
+
     .layout {
       padding: 20px 24px 28px;
       display: grid;
@@ -357,33 +477,6 @@
       gap: 18px;
     }
 
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .stat {
-      background: var(--surface-strong);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 14px;
-      display: grid;
-      gap: 4px;
-    }
-
-    .stat-value {
-      font-size: 1.55rem;
-      font-weight: 900;
-      color: var(--primary-strong);
-    }
-
-    .stat-label {
-      color: var(--muted);
-      font-size: 0.82rem;
-      font-weight: 700;
-    }
-
     .table-wrap {
       overflow-x: auto;
     }
@@ -452,6 +545,7 @@
     .station-select-stack {
       display: grid;
       gap: 8px;
+      position: relative;
     }
 
     .station-field-actions {
@@ -466,6 +560,118 @@
       padding: 7px 12px;
       font-size: 0.86rem;
       white-space: nowrap;
+    }
+
+    .station-select-native {
+      position: absolute;
+      width: 1px;
+      min-height: 1px;
+      height: 1px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .station-picker {
+      position: relative;
+    }
+
+    .station-picker-button {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 10px 36px 10px 11px;
+      text-align: left;
+      font-weight: 800;
+      position: relative;
+    }
+
+    .station-picker-button::after {
+      content: "";
+      position: absolute;
+      right: 13px;
+      top: 50%;
+      width: 9px;
+      height: 9px;
+      border-right: 2px solid #172033;
+      border-bottom: 2px solid #172033;
+      transform: translateY(-65%) rotate(45deg);
+    }
+
+    .station-picker-button:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      outline: none;
+    }
+
+    .station-picker-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 100%;
+      line-height: 1.35;
+    }
+
+    .station-picker-label span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .station-picker-label .station-color-swatch,
+    .station-picker-option .station-color-swatch {
+      flex: 0 0 12px;
+      width: 12px;
+      height: 12px;
+      margin-top: 0;
+    }
+
+    .station-picker-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 6px);
+      z-index: 20;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      padding: 5px;
+    }
+
+    .station-picker-option {
+      width: 100%;
+      min-height: 38px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 9px;
+      text-align: left;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .station-picker-option:hover,
+    .station-picker-option:focus {
+      background: #f1f5f9;
+      outline: none;
+    }
+
+    .station-picker-option.is-selected {
+      background: #ecfdf5;
+      color: var(--primary-strong);
     }
 
     .assignment-scope {
@@ -571,7 +777,8 @@
     }
 
     .schedule-matrix.is-month-view {
-      min-width: 1980px;
+      min-width: 1480px;
+      table-layout: fixed;
     }
 
     .schedule-matrix.is-day-view {
@@ -586,6 +793,12 @@
       min-width: 154px;
     }
 
+    .schedule-matrix.is-month-view th,
+    .schedule-matrix.is-month-view td {
+      min-width: 92px;
+      padding: 7px;
+    }
+
     .schedule-matrix th:first-child,
     .schedule-matrix td:first-child {
       position: sticky;
@@ -593,6 +806,12 @@
       z-index: 2;
       min-width: 190px;
       background: #fff;
+    }
+
+    .schedule-matrix.is-month-view th:first-child,
+    .schedule-matrix.is-month-view td:first-child {
+      min-width: 184px;
+      width: 184px;
     }
 
     .schedule-matrix thead th {
@@ -609,8 +828,47 @@
 
     .station-cell {
       font-weight: 900;
-      background: #fff7ed !important;
+      background: #fff !important;
     }
+
+    .station-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      line-height: 1.35;
+    }
+
+    .station-color-swatch {
+      flex: 0 0 12px;
+      width: 12px;
+      height: 12px;
+      margin-top: 4px;
+      border-radius: 3px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.16);
+    }
+
+    .station-color-0 { background: #0f766e; }
+    .station-color-1 { background: #2563eb; }
+    .station-color-2 { background: #7c3aed; }
+    .station-color-3 { background: #db2777; }
+    .station-color-4 { background: #dc2626; }
+    .station-color-5 { background: #ea580c; }
+    .station-color-6 { background: #ca8a04; }
+    .station-color-7 { background: #16a34a; }
+    .station-color-8 { background: #0891b2; }
+    .station-color-9 { background: #4f46e5; }
+    .station-color-10 { background: #be123c; }
+    .station-color-11 { background: #854d0e; }
+    .station-color-12 { background: #15803d; }
+    .station-color-13 { background: #9333ea; }
+    .station-color-14 { background: #0369a1; }
+    .station-color-15 { background: #c2410c; }
+    .station-color-16 { background: #65a30d; }
+    .station-color-17 { background: #0d9488; }
+    .station-color-18 { background: #e11d48; }
+    .station-color-19 { background: #1d4ed8; }
+    .station-color-20 { background: #b45309; }
+    .station-color-21 { background: #6d28d9; }
 
     .schedule-cell {
       vertical-align: top;
@@ -618,16 +876,36 @@
       min-height: 58px;
     }
 
+    .schedule-matrix.is-month-view .schedule-cell {
+      height: 74px;
+      min-height: 74px;
+      vertical-align: middle;
+    }
+
+    .schedule-matrix.is-month-view .station-cell {
+      height: 74px;
+    }
+
+    .schedule-matrix.is-month-view .station-cell .cell-main {
+      line-height: 1.25;
+    }
+
+    .schedule-matrix.is-month-view .station-cell .cell-sub {
+      margin-top: 2px;
+      font-size: 0.74rem;
+      line-height: 1.25;
+    }
+
     .schedule-cell.has-movement {
-      background: #fef9c3;
+      background: #fff;
     }
 
     .schedule-cell.is-green {
-      background: #dcfce7;
+      background: #fff;
     }
 
     .schedule-cell.is-red {
-      background: #fee2e2;
+      background: #fff;
     }
 
     .schedule-count {
@@ -635,6 +913,86 @@
       font-size: 0.82rem;
       color: #172033;
       margin-bottom: 6px;
+    }
+
+    .schedule-count.has-movement {
+      color: #92400e;
+    }
+
+    .schedule-count.is-green {
+      color: #047857;
+    }
+
+    .schedule-count.is-red {
+      color: #b91c1c;
+    }
+
+    .month-cell-summary {
+      display: grid;
+      gap: 5px;
+      min-height: 58px;
+      align-content: center;
+    }
+
+    .month-count-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 900;
+      color: #172033;
+      line-height: 1.2;
+    }
+
+    .schedule-cell.has-movement .month-cell-summary {
+      border-left: 3px solid #f59e0b;
+      padding-left: 6px;
+    }
+
+    .schedule-cell.is-green .month-count-line {
+      color: #047857;
+    }
+
+    .schedule-cell.is-red .month-count-line {
+      color: #b91c1c;
+    }
+
+    .month-count-line strong {
+      font-size: 0.9rem;
+    }
+
+    .month-flow-line {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .month-flow-pill {
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 0.72rem;
+      font-weight: 900;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .month-flow-pill.is-in {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .month-flow-pill.is-out {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .month-days-line {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1.2;
+      white-space: nowrap;
     }
 
     .movement-entry {
@@ -647,6 +1005,39 @@
       word-break: break-word;
     }
 
+    .movement-station-group {
+      border-radius: 4px;
+      padding: 5px 6px;
+      margin-bottom: 5px;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      font-weight: 800;
+      word-break: break-word;
+    }
+
+    .movement-group-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-bottom: 5px;
+      margin-bottom: 5px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+      font-weight: 900;
+    }
+
+    .movement-group-title .station-color-swatch {
+      flex-basis: 10px;
+      width: 10px;
+      height: 10px;
+      margin-top: 0;
+    }
+
+    .movement-group-item + .movement-group-item {
+      border-top: 1px solid rgba(15, 23, 42, 0.1);
+      margin-top: 5px;
+      padding-top: 5px;
+    }
+
     .movement-in {
       background: rgba(15, 118, 110, 0.13);
       color: #115e59;
@@ -655,6 +1046,15 @@
     .movement-out {
       background: rgba(185, 28, 28, 0.13);
       color: #991b1b;
+    }
+
+    .movement-out-line {
+      margin-bottom: 7px;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      font-weight: 800;
+      color: #991b1b;
+      word-break: break-word;
     }
 
     .schedule-entry {
@@ -860,8 +1260,9 @@
 
       .toolbar,
       .records-query,
+      .fairness-summary,
+      .fairness-grid,
       .layout,
-      .stats,
       .schedule-layout {
         grid-template-columns: 1fr;
       }
@@ -899,8 +1300,6 @@
       .toolbar,
       .records-query,
       .layout > .panel:first-child,
-      #records-table-wrap,
-      #records-empty,
       .schedule-toolbar,
       .schedule-controls {
         display: none !important;
@@ -1002,13 +1401,19 @@
               <select id="nurse-select" required></select>
             </div>
             <div class="field">
-              <label for="station-select">調派駐站</label>
+              <label for="station-picker-button">調派駐站</label>
               <div class="station-select-stack">
                 <div class="station-field-actions">
                   <button class="btn btn-ghost hidden" type="button" id="add-station-btn">新增駐站</button>
                   <button class="btn btn-danger hidden" type="button" id="delete-station-btn">刪除駐站</button>
                 </div>
-                <select id="station-select" required></select>
+                <select id="station-select" class="station-select-native" required tabindex="-1" aria-hidden="true"></select>
+                <div class="station-picker" id="station-picker">
+                  <button class="station-picker-button" type="button" id="station-picker-button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="station-picker-label" id="station-picker-label">請選擇駐站</span>
+                  </button>
+                  <div class="station-picker-menu hidden" id="station-picker-menu" role="listbox" tabindex="-1"></div>
+                </div>
               </div>
               <div class="rule-note" id="dispatch-rule-note"></div>
             </div>
@@ -1045,39 +1450,6 @@
       </section>
 
       <div class="content-stack">
-        <section class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">區間統計</div>
-              <div class="muted" id="summary-range">-</div>
-            </div>
-          </div>
-          <div class="panel-body">
-            <div class="stats">
-              <div class="stat">
-                <div class="stat-value" id="stat-hours">0</div>
-                <div class="stat-label">總工時</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value" id="stat-records">0</div>
-                <div class="stat-label">調派筆數</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value" id="stat-nurses">0</div>
-                <div class="stat-label">護理師人數</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value" id="stat-temp-count">0</div>
-                <div class="stat-label">臨調次數</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value" id="stat-temp-hours">0</div>
-                <div class="stat-label">臨調時數</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section class="panel">
           <div class="panel-header">
             <div>
@@ -1130,56 +1502,100 @@
         <section class="panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title">調派紀錄</div>
-              <div class="muted">上方查詢條件，下方顯示符合條件的所有調派 log。</div>
+              <div class="panel-title">年度臨時徵調統計</div>
+              <div class="muted">統計區間固定為年度 1/1 至 12/31，用於平衡駐站需求與護理師調度公平性。</div>
             </div>
           </div>
           <div class="panel-body">
-            <div class="records-query" id="toolbar">
+            <div class="records-query" id="fairness-toolbar">
               <div class="field">
-                <label for="filter-date-from">起始日期</label>
-                <input id="filter-date-from" type="date">
+                <label for="fairness-year">統計年度</label>
+                <input id="fairness-year" type="number" min="2020" max="2100" step="1">
               </div>
               <div class="field">
-                <label for="filter-date-to">結束日期</label>
-                <input id="filter-date-to" type="date">
+                <label for="fairness-range">統計區間</label>
+                <input id="fairness-range" type="text" readonly>
               </div>
               <div class="field">
-                <label for="filter-station">駐站</label>
-                <select id="filter-station"></select>
+                <label for="fairness-station">駐站</label>
+                <select id="fairness-station"></select>
               </div>
               <div class="field">
-                <label for="filter-nurse">護理師</label>
-                <select id="filter-nurse"></select>
+                <label for="fairness-nurse">護理師</label>
+                <select id="fairness-nurse"></select>
               </div>
               <div class="field">
-                <label for="record-count-display">紀錄數</label>
+                <label for="record-count-display">年度紀錄數</label>
                 <input id="record-count-display" type="text" readonly>
               </div>
               <div class="records-actions">
-                <button class="btn btn-primary" type="button" id="reload-btn">查詢</button>
+                <button class="btn btn-primary" type="button" id="fairness-load-btn">查詢統計</button>
                 <button class="btn btn-ghost" type="button" id="export-records-btn">輸出 Excel</button>
               </div>
             </div>
+            <div class="hidden" id="toolbar">
+              <input id="filter-date-from" type="date">
+              <input id="filter-date-to" type="date">
+              <select id="filter-station"></select>
+              <select id="filter-nurse"></select>
+              <button type="button" id="reload-btn">查詢</button>
+            </div>
             <div class="status" id="records-status"></div>
-            <div id="records-empty" class="empty hidden">目前沒有符合條件的工時調派紀錄。</div>
-            <div id="records-table-wrap" class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>期間</th>
-                    <th>駐站</th>
-                    <th>護理師</th>
-                    <th>臨時調配</th>
-                    <th>班別</th>
-                    <th>時間</th>
-                    <th>時數</th>
-                    <th>備註</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="records-body"></tbody>
-              </table>
+            <div class="fairness-summary">
+              <div class="fairness-stat">
+                <span class="cell-sub">臨時徵調紀錄</span>
+                <strong id="fairness-total-records">0</strong>
+              </div>
+              <div class="fairness-stat">
+                <span class="cell-sub">涉及護理師</span>
+                <strong id="fairness-total-nurses">0</strong>
+              </div>
+              <div class="fairness-stat">
+                <span class="cell-sub">累計天數</span>
+                <strong id="fairness-total-hours">0</strong>
+              </div>
+            </div>
+            <div class="fairness-grid">
+              <div class="fairness-table-card">
+                <div class="fairness-table-header">
+                  <div class="fairness-table-title">各駐站臨時徵調次數</div>
+                  <div class="muted" id="fairness-station-count">0 筆</div>
+                </div>
+                <div class="fairness-table-wrap">
+                  <table class="fairness-station-table">
+                    <thead>
+                      <tr>
+                        <th>駐站</th>
+                        <th>調入</th>
+                        <th>調出</th>
+                        <th>合計</th>
+                        <th>天數</th>
+                      </tr>
+                    </thead>
+                    <tbody id="fairness-station-body"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="fairness-table-card">
+                <div class="fairness-table-header">
+                  <div class="fairness-table-title">護理師個人徵調次數</div>
+                  <div class="muted" id="fairness-nurse-count">0 筆</div>
+                </div>
+                <div class="fairness-table-wrap">
+                  <table class="fairness-nurse-table">
+                    <thead>
+                      <tr>
+                        <th>護理師</th>
+                        <th>原駐站</th>
+                        <th>次數</th>
+                        <th>天數</th>
+                        <th>下次可調派</th>
+                      </tr>
+                    </thead>
+                    <tbody id="fairness-nurse-body"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1270,7 +1686,24 @@
       recordsSnapshotKey: '',
       recordsSnapshotReady: false,
       recordsAutoRefreshTimer: null,
-      isAutoRefreshing: false
+      isAutoRefreshing: false,
+      isLoadingData: false,
+      dataRequestId: 0,
+      fairnessRequestId: 0,
+      fairness: {
+        year: new Date().getFullYear(),
+        dateFrom: '',
+        dateTo: '',
+        stationCode: '',
+        nurseEmail: '',
+        stationStats: [],
+        nurseStats: [],
+        records: [],
+        cooldownDays: 30,
+        ready: false,
+        isLoading: false,
+        testMode: false
+      }
     };
 
     const FULL_SHIFT_BREAK_HOURS = 1;
@@ -1281,28 +1714,30 @@
     const STATION_CODE_PREFIX = 'GRP-CO-';
     const EXTERNAL_STATION_CODE_PREFIX = 'GRP-CO-EX-';
     const RECORDS_AUTO_REFRESH_MS = 30000;
+    const STATION_COLOR_CLASS_COUNT = 22;
 
+    // 北到南排序，月曆、駐站下拉與護理師清單共用。
     const SCHEDULE_STATION_RULES = [
       { label: '汀州(有訪員時)', keywords: ['汀州', '台北'] },
       { label: '輔大', keywords: ['輔大', '輔仁', '輔仁大學', '輔大醫院', '輔仁大學附設醫院'] },
       { label: '部立桃園', keywords: ['部立桃園', '衛福部桃園', '衛生福利部桃園', '桃園醫院', '桃園'] },
       { label: '新竹台大', keywords: ['新竹台大', '台大新竹', '台大醫院新竹', '新竹'] },
-      { label: '部立苗栗', keywords: ['部立苗栗', '衛福部苗栗', '衛生福利部苗栗', '苗栗醫院', '苗栗'] },
       { label: '宜蘭羅東聖母', keywords: ['宜蘭羅東聖母', '羅東聖母', '宜蘭羅東', '聖母'] },
+      { label: '部立苗栗', keywords: ['部立苗栗', '衛福部苗栗', '衛生福利部苗栗', '苗栗醫院', '苗栗'] },
+      { label: '台中豐原', keywords: ['台中豐原', '部立豐原', '衛福部豐原', '衛生福利部豐原', '豐原醫院', '豐原'] },
       { label: '台中慈濟', keywords: ['台中慈濟', '慈濟台中', '慈濟'] },
       { label: '中榮', keywords: ['中榮', '台中榮總', '台中榮民總醫院', '榮總'] },
-      { label: '台中豐原', keywords: ['台中豐原', '部立豐原', '衛福部豐原', '衛生福利部豐原', '豐原醫院', '豐原'] },
       { label: '員基', keywords: ['員基', '員林基督教', '員林'] },
+      { label: '花蓮門諾', keywords: ['花蓮門諾', '門諾'] },
+      { label: '澎湖三總', keywords: ['澎湖三總', '三總澎湖', '三軍總醫院澎湖', '澎湖', '三總'] },
       { label: '部嘉', keywords: ['部嘉', '部立嘉義', '衛福部嘉義', '衛生福利部嘉義', '嘉義醫院', '嘉義'] },
       { label: '安南', keywords: ['安南', '台南市立安南'] },
       { label: '台南市醫', keywords: ['台南市醫', '台南市立醫院', '台南市立'] },
       { label: '高雄大同', keywords: ['高雄大同', '高雄市立大同', '市立大同', '大同醫院', '大同'] },
       { label: '義大', keywords: ['義大', '高雄義大'] },
       { label: '民生', keywords: ['民生', '高雄民生', '民生醫院', '市立民生'] },
-      { label: '部立屏東', keywords: ['部立屏東', '衛福部屏東', '衛生福利部屏東', '屏東醫院', '屏東'] },
-      { label: '花蓮門諾', keywords: ['花蓮門諾', '門諾'] },
       { label: '部立台東', keywords: ['部立台東', '衛福部台東', '衛生福利部台東', '台東醫院', '台東'] },
-      { label: '澎湖三總', keywords: ['澎湖三總', '三總澎湖', '三軍總醫院澎湖', '澎湖', '三總'] },
+      { label: '部立屏東', keywords: ['部立屏東', '衛福部屏東', '衛生福利部屏東', '屏東醫院', '屏東'] },
       { label: '美兆（委外）', keywords: ['美兆'] },
       { label: '大能唯（委外）', keywords: ['大能唯'] }
     ];
@@ -1320,6 +1755,9 @@
       state.scheduleDayCount = getResponsiveDayCount();
       el.scheduleYear.value = year;
       el.scheduleDate.value = today;
+      el.fairnessYear.value = year;
+      updateFairnessRange();
+      renderFairnessStats();
       updateScheduleControls();
       loadData({
         dateFrom: today,
@@ -1343,6 +1781,18 @@
         'filter-station',
         'filter-nurse',
         'record-count-display',
+        'fairness-year',
+        'fairness-range',
+        'fairness-station',
+        'fairness-nurse',
+        'fairness-load-btn',
+        'fairness-total-records',
+        'fairness-total-nurses',
+        'fairness-total-hours',
+        'fairness-station-count',
+        'fairness-nurse-count',
+        'fairness-station-body',
+        'fairness-nurse-body',
         'reload-btn',
         'export-records-btn',
         'records-status',
@@ -1379,6 +1829,10 @@
         'dispatch-target-preview',
         'nurse-select-field',
         'station-select',
+        'station-picker',
+        'station-picker-button',
+        'station-picker-label',
+        'station-picker-menu',
         'dispatch-rule-note',
         'nurse-select',
         'shift-name',
@@ -1390,15 +1844,6 @@
         'form-status',
         'clear-form-btn',
         'save-btn',
-        'summary-range',
-        'stat-hours',
-        'stat-records',
-        'stat-nurses',
-        'stat-temp-count',
-        'stat-temp-hours',
-        'records-empty',
-        'records-table-wrap',
-        'records-body',
         'station-modal',
         'station-modal-description',
         'station-modal-close',
@@ -1420,10 +1865,26 @@
       el.deleteStationBtn.addEventListener('click', deleteSelectedStation);
       el.reloadBtn.addEventListener('click', () => loadData(collectFilters()));
       el.exportRecordsBtn.addEventListener('click', exportRecordsToExcel);
-      el.testModeBtn.addEventListener('click', () => {
-        state.testMode = !state.testMode;
-        loadData(collectFilters());
+      el.fairnessLoadBtn.addEventListener('click', () => loadFairnessStats({ reason: 'manual' }));
+      el.fairnessYear.addEventListener('input', () => {
+        const rawYear = Number(el.fairnessYear.value);
+        if (!Number.isInteger(rawYear) || rawYear < 2020 || rawYear > 2100) return;
+        updateFairnessRange();
+        markFairnessFiltersDirty();
       });
+      el.fairnessYear.addEventListener('change', () => {
+        updateFairnessRange();
+        markFairnessFiltersDirty();
+      });
+      el.fairnessStation.addEventListener('change', () => {
+        state.fairness.stationCode = el.fairnessStation.value || '';
+        markFairnessFiltersDirty();
+      });
+      el.fairnessNurse.addEventListener('change', () => {
+        state.fairness.nurseEmail = el.fairnessNurse.value || '';
+        markFairnessFiltersDirty();
+      });
+      el.testModeBtn.addEventListener('click', toggleTestMode);
       el.scheduleView.addEventListener('change', () => {
         state.scheduleView = normalizeScheduleView(el.scheduleView.value);
         if (isMobileCaseMode()) {
@@ -1468,11 +1929,18 @@
         updateDispatchTargetModeUi();
       });
       el.stationSelect.addEventListener('change', () => {
+        syncStationPicker();
         renderOriginStationOptions();
         renderFormNurseOptions();
         updateDispatchTargetModeUi();
         updateDispatchRuleNote();
         updateStationActionButtons();
+      });
+      el.stationPickerButton.addEventListener('click', toggleStationPicker);
+      el.stationPickerButton.addEventListener('keydown', handleStationPickerButtonKeydown);
+      el.stationPickerMenu.addEventListener('keydown', handleStationPickerMenuKeydown);
+      document.addEventListener('click', (event) => {
+        if (el.stationPicker && !el.stationPicker.contains(event.target)) closeStationPicker();
       });
       document.querySelectorAll('[data-dispatch-target-mode]').forEach((button) => {
         button.addEventListener('click', () => selectDispatchTargetMode(button.getAttribute('data-dispatch-target-mode')));
@@ -1514,6 +1982,9 @@
     async function loadData(filters, options) {
       const settings = options || {};
       const isSilent = Boolean(settings.silent);
+      const requestId = state.dataRequestId + 1;
+      state.dataRequestId = requestId;
+      if (!isSilent) state.isLoadingData = true;
       if (!isSilent) {
         setPageLoading(true);
         setStatus('');
@@ -1521,19 +1992,26 @@
       }
       try {
         const response = await callServer('getDispatchAppData', filters || {});
+        if (requestId !== state.dataRequestId) return false;
         if (!response || !response.success) {
           throw new Error(response && response.message ? response.message : '資料讀取失敗。');
         }
         applyData(response, settings);
+        return true;
       } catch (error) {
+        if (requestId !== state.dataRequestId) return false;
         const message = error && error.message ? error.message : '資料讀取失敗。';
         if (state.viewer) {
           setRecordsStatus(isSilent ? `調派紀錄同步失敗：${message}` : message, 'error');
         } else {
           showLoadError(message);
         }
+        return false;
       } finally {
-        if (!isSilent) setPageLoading(false);
+        if (requestId === state.dataRequestId) {
+          if (!isSilent) state.isLoadingData = false;
+          if (!isSilent) setPageLoading(false);
+        }
       }
     }
 
@@ -1558,6 +2036,9 @@
       state.recordsSnapshotKey = nextRecordsSnapshotKey;
       state.recordsSnapshotReady = true;
       rebuildDataIndexes();
+      const shouldLoadFairness = !state.fairness.ready
+        || state.fairness.testMode !== state.testMode
+        || (!settings.silent && previousRecordsSnapshotReady && previousRecordsSnapshotKey !== nextRecordsSnapshotKey);
       state.scheduleYear = inferScheduleYear();
       state.scheduleView = normalizeScheduleView(state.scheduleView);
       state.scheduleDayCount = state.scheduleView === 'day'
@@ -1576,6 +2057,7 @@
       el.filterDateTo.value = state.filters.dateTo || '';
 
       renderStationOptions();
+      renderFairnessFilterOptions();
       renderStationManagerOptions();
       renderShiftOptions();
       renderFilterNurseOptions();
@@ -1583,9 +2065,7 @@
       updateDispatchTargetModeUi();
       updateDispatchRuleNote();
       renderStationCreateControl();
-      renderSummary();
       renderScheduleMatrix();
-      renderRecords();
       notifyRecordsSynced(previousRecordsSnapshotKey, nextRecordsSnapshotKey, syncReason, previousRecordsSnapshotReady);
 
       if (!state.stations.length) {
@@ -1598,7 +2078,7 @@
       }
 
       el.appMain.classList.remove('hidden');
-      el.recordCountDisplay.value = `${state.records.length} 筆`;
+      el.recordCountDisplay.value = state.fairness.ready ? `${state.fairness.records.length} 筆` : '尚未查詢';
       el.scheduleView.value = state.scheduleView;
       el.scheduleDate.value = state.scheduleDate;
       el.scheduleYear.value = state.scheduleYear;
@@ -1607,6 +2087,12 @@
       if (!el.dispatchEndDate.value) el.dispatchEndDate.value = el.dispatchStartDate.value;
       startRecordsAutoRefresh();
       reconcileResponsiveDayRange();
+      if (shouldLoadFairness) {
+        window.setTimeout(() => loadFairnessStats({
+          silent: Boolean(settings.silent),
+          reason: syncReason
+        }), 0);
+      }
     }
 
     function rebuildDataIndexes() {
@@ -1743,7 +2229,12 @@
       if (state.filters.dateFrom !== rangeStart || state.filters.dateTo !== rangeEnd) {
         el.filterDateFrom.value = rangeStart;
         el.filterDateTo.value = rangeEnd;
-        loadData(collectFilters());
+        window.setTimeout(() => {
+          loadData(collectFilters(), {
+            silent: true,
+            reason: 'range-sync'
+          });
+        }, 0);
         return;
       }
       renderScheduleMatrix();
@@ -1773,6 +2264,21 @@
       el.testModeBtn.classList.remove('hidden');
       el.testModeBtn.classList.toggle('is-active', state.testMode);
       el.testModeBtn.textContent = state.testMode ? '關閉測試模式' : '啟用測試模式';
+    }
+
+    async function toggleTestMode() {
+      if (state.isLoadingData) return;
+      const nextTestMode = !state.testMode;
+      const loadingText = nextTestMode ? '啟用測試模式中' : '關閉測試模式中';
+      el.testModeBtn.disabled = true;
+      el.testModeBtn.textContent = loadingText;
+      const ok = await loadData({
+        ...collectFilters(),
+        testMode: nextTestMode
+      }, {
+        reason: 'test-mode-toggle'
+      });
+      if (!ok) renderTestModeControl();
     }
 
     function notifyLoginComplete() {
@@ -1823,7 +2329,7 @@
     }
 
     async function refreshRecordsNow(reason) {
-      if (!state.viewer || state.isAutoRefreshing || state.isSaving || state.isCreatingStation || state.isDeletingStation) return;
+      if (!state.viewer || state.isLoadingData || state.isAutoRefreshing || state.isSaving || state.isCreatingStation || state.isDeletingStation) return;
       if (reason === 'auto' && document.hidden) return;
       state.isAutoRefreshing = true;
       try {
@@ -1891,7 +2397,111 @@
         el.stationSelect.value = orderedStations[0].code;
       }
 
+      renderStationPickerOptions(orderedStations);
       renderOriginStationOptions(selectedOriginStation);
+    }
+
+    function renderStationPickerOptions(stations) {
+      const stationList = Array.isArray(stations) ? stations : [];
+      const selectedCode = el.stationSelect.value || '';
+      el.stationPickerMenu.innerHTML = stationList.map((station) => {
+        const isSelected = station.code === selectedCode;
+        return `
+          <button
+            class="station-picker-option${isSelected ? ' is-selected' : ''}"
+            type="button"
+            role="option"
+            aria-selected="${isSelected ? 'true' : 'false'}"
+            data-station-code="${escapeHtml(station.code)}"
+          >
+            ${buildStationColorSwatchHtml(station)}
+            <span>${escapeHtml(getStationDisplayName(station))}</span>
+          </button>
+        `;
+      }).join('');
+      el.stationPickerMenu.querySelectorAll('[data-station-code]').forEach((button) => {
+        button.addEventListener('click', () => selectStationFromPicker(button.getAttribute('data-station-code')));
+      });
+      syncStationPicker();
+    }
+
+    function selectStationFromPicker(stationCode) {
+      if (!stationCode) return;
+      if (el.stationSelect.value === stationCode) {
+        closeStationPicker();
+        syncStationPicker();
+        return;
+      }
+      el.stationSelect.value = stationCode;
+      closeStationPicker();
+      el.stationSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function syncStationPicker() {
+      const station = getStationByCode(el.stationSelect.value);
+      const stationText = station ? getStationDisplayName(station) : '請選擇駐站';
+      el.stationPickerLabel.innerHTML = station
+        ? `${buildStationColorSwatchHtml(station)}<span>${escapeHtml(stationText)}</span>`
+        : `<span>${escapeHtml(stationText)}</span>`;
+      el.stationPickerButton.disabled = !getOrderedStations().length;
+      el.stationPickerMenu.querySelectorAll('[data-station-code]').forEach((button) => {
+        const isSelected = button.getAttribute('data-station-code') === el.stationSelect.value;
+        button.classList.toggle('is-selected', isSelected);
+        button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      });
+    }
+
+    function toggleStationPicker() {
+      if (el.stationPickerButton.disabled) return;
+      if (el.stationPickerMenu.classList.contains('hidden')) {
+        openStationPicker();
+        return;
+      }
+      closeStationPicker();
+    }
+
+    function openStationPicker() {
+      if (el.stationPickerButton.disabled) return;
+      el.stationPickerMenu.classList.remove('hidden');
+      el.stationPickerButton.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeStationPicker() {
+      if (!el.stationPickerMenu) return;
+      el.stationPickerMenu.classList.add('hidden');
+      el.stationPickerButton.setAttribute('aria-expanded', 'false');
+    }
+
+    function handleStationPickerButtonKeydown(event) {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openStationPicker();
+      focusStationPickerOption(event.key === 'ArrowUp' ? -1 : 1);
+    }
+
+    function handleStationPickerMenuKeydown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeStationPicker();
+        el.stationPickerButton.focus();
+        return;
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        focusStationPickerOption(event.key === 'ArrowDown' ? 1 : -1);
+      }
+    }
+
+    function focusStationPickerOption(direction) {
+      const options = Array.from(el.stationPickerMenu.querySelectorAll('[data-station-code]'));
+      if (!options.length) return;
+      const activeIndex = options.indexOf(document.activeElement);
+      const selectedIndex = options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+      const currentIndex = activeIndex >= 0 ? activeIndex : selectedIndex;
+      const nextIndex = currentIndex >= 0
+        ? (currentIndex + direction + options.length) % options.length
+        : 0;
+      options[nextIndex].focus();
     }
 
     function renderOriginStationOptions(preferredValue) {
@@ -1926,6 +2536,88 @@
       ].join('');
       const filterNurseEmail = state.filters.nurseEmail || '';
       el.filterNurse.value = nurses.some((nurse) => nurse.email === filterNurseEmail) ? filterNurseEmail : '';
+    }
+
+    function renderFairnessFilterOptions() {
+      const selectedStation = state.fairness.stationCode || el.fairnessStation.value || '';
+      const selectedNurse = state.fairness.nurseEmail || el.fairnessNurse.value || '';
+      const stationOptions = getFairnessStationOptions();
+      el.fairnessStation.innerHTML = [
+        '<option value="">全部駐站</option>',
+        ...stationOptions.map((station) => (
+          `<option value="${escapeHtml(station.code)}">${escapeHtml(getStationDisplayName(station))}</option>`
+        ))
+      ].join('');
+      el.fairnessStation.value = stationOptions.some((station) => station.code === selectedStation)
+        ? selectedStation
+        : '';
+      state.fairness.stationCode = el.fairnessStation.value || '';
+
+      const nurseOptions = getFairnessNurseOptions();
+      el.fairnessNurse.innerHTML = [
+        '<option value="">全部護理師</option>',
+        ...nurseOptions.map((nurse) => (
+          `<option class="${nurse.isUnavailable ? 'nurse-option-unavailable' : ''}" value="${escapeHtml(nurse.email)}">${escapeHtml(formatNurseOptionLabel(nurse))}</option>`
+        ))
+      ].join('');
+      el.fairnessNurse.value = nurseOptions.some((nurse) => nurse.email === selectedNurse)
+        ? selectedNurse
+        : '';
+      state.fairness.nurseEmail = el.fairnessNurse.value || '';
+    }
+
+    function getFairnessStationOptions() {
+      const stationMap = new Map();
+      const addStation = (station) => {
+        const code = String(station && station.code || station && station.stationCode || '').trim();
+        if (!code || stationMap.has(code)) return;
+        stationMap.set(code, {
+          code,
+          name: String(station && (station.name || station.stationName) || code).trim()
+        });
+      };
+
+      getOrderedStations().forEach(addStation);
+      getAllNurseSourceStations().forEach(addStation);
+      (state.fairness.stationStats || []).forEach(addStation);
+      (state.fairness.records || []).forEach((record) => {
+        addStation({ code: record.stationCode, name: record.stationName });
+        addStation({ code: record.originalStationCode, name: record.originalStationName });
+      });
+
+      return Array.from(stationMap.values()).sort(compareStationsByDisplayOrder);
+    }
+
+    function getFairnessNurseOptions() {
+      const nurseMap = new Map();
+      const addNurse = (nurse) => {
+        const email = String(nurse && nurse.email || nurse && nurse.nurseEmail || '').trim();
+        if (!email || nurseMap.has(email)) return;
+        nurseMap.set(email, {
+          assignmentKey: String(nurse && nurse.assignmentKey || '').trim(),
+          email,
+          name: String(nurse && (nurse.name || nurse.nurseName) || email).trim(),
+          orgCode: String(nurse && (nurse.orgCode || nurse.originalStationCode) || '').trim(),
+          orgName: String(nurse && (nurse.orgName || nurse.originalStationName) || '').trim(),
+          isUnavailable: Boolean(nurse && nurse.isUnavailable),
+          availabilityLabel: String(nurse && nurse.availabilityLabel || '').trim(),
+          status: String(nurse && nurse.status || '').trim()
+        });
+      };
+
+      getNursesForStation('').forEach(addNurse);
+      (state.fairness.nurseStats || []).forEach(addNurse);
+      (state.fairness.records || []).forEach((record) => addNurse({
+        assignmentKey: record.assignmentKey,
+        email: record.nurseEmail,
+        name: record.nurseName,
+        orgCode: record.originalStationCode,
+        orgName: record.originalStationName,
+        isUnavailable: record.isNurseUnavailable,
+        status: record.nurseStatus
+      }));
+
+      return sortNurseList_(Array.from(nurseMap.values()));
     }
 
     function renderFormNurseOptions() {
@@ -2187,6 +2879,7 @@
         applyData(response);
         if (response.createdStation && response.createdStation.code) {
           el.stationSelect.value = response.createdStation.code;
+          syncStationPicker();
           renderOriginStationOptions();
           renderFormNurseOptions();
           updateDispatchRuleNote();
@@ -2289,17 +2982,167 @@
       if (state.scheduleView === 'day') setScheduleDate(state.scheduleDate || getTodayString());
     }
 
-    function renderSummary() {
-      const totalHours = state.records.reduce((sum, record) => sum + getRecordWorkHours(record), 0);
-      const nurseSet = new Set(state.records.map((record) => record.assignmentKey).filter(Boolean));
-      const temporaryRecords = state.records.filter((record) => getTemporaryDispatchInfo(record).isTemporary);
-      const temporaryHours = temporaryRecords.reduce((sum, record) => sum + getDispatchTotalHours(record), 0);
-      el.summaryRange.textContent = `${state.filters.dateFrom || '-'} 至 ${state.filters.dateTo || '-'}`;
-      el.statHours.textContent = formatNumber(totalHours);
-      el.statRecords.textContent = String(state.records.length);
-      el.statNurses.textContent = String(nurseSet.size);
-      el.statTempCount.textContent = String(temporaryRecords.length);
-      el.statTempHours.textContent = formatNumber(temporaryHours);
+    async function loadFairnessStats(options) {
+      if (!state.viewer || state.fairness.isLoading) return false;
+      const settings = options || {};
+      const requestId = state.fairnessRequestId + 1;
+      state.fairnessRequestId = requestId;
+      state.fairness.isLoading = true;
+      setFairnessLoading(true);
+      if (!settings.silent) {
+        setRecordsStatus('年度臨時徵調統計查詢中...');
+      }
+
+      try {
+        const filters = collectFairnessFilters();
+        const response = await callServer('getDispatchFairnessStats', filters);
+        if (requestId !== state.fairnessRequestId) return false;
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '年度臨時徵調統計讀取失敗。');
+        }
+
+        state.fairness = {
+          ...state.fairness,
+          year: Number(response.year || filters.year),
+          dateFrom: response.dateFrom || `${filters.year}-01-01`,
+          dateTo: response.dateTo || `${filters.year}-12-31`,
+          stationCode: filters.stationCode || '',
+          nurseEmail: filters.nurseEmail || '',
+          cooldownDays: Number(response.cooldownDays || state.fairness.cooldownDays || 30),
+          stationStats: Array.isArray(response.stationStats) ? response.stationStats : [],
+          nurseStats: Array.isArray(response.nurseStats) ? response.nurseStats : [],
+          records: Array.isArray(response.records) ? response.records : [],
+          ready: true,
+          isLoading: false,
+          testMode: state.testMode
+        };
+        renderFairnessFilterOptions();
+        renderFairnessStats();
+        if (!settings.silent) {
+          setRecordsStatus(`年度臨時徵調統計已更新：目前 ${formatNumber(state.fairness.records.length)} 筆｜${formatSyncClock(new Date())}`, 'success');
+        }
+        return true;
+      } catch (error) {
+        if (requestId !== state.fairnessRequestId) return false;
+        setRecordsStatus(error && error.message ? error.message : '年度臨時徵調統計讀取失敗。', 'error');
+        return false;
+      } finally {
+        if (requestId === state.fairnessRequestId) {
+          state.fairness.isLoading = false;
+          setFairnessLoading(false);
+        }
+      }
+    }
+
+    function renderFairnessStats() {
+      const records = getDisplayedRecords();
+      const stationStats = Array.isArray(state.fairness.stationStats) ? state.fairness.stationStats : [];
+      const nurseStats = Array.isArray(state.fairness.nurseStats) ? state.fairness.nurseStats : [];
+      const totalDays = records.reduce((sum, record) => sum + getDispatchDays(record), 0);
+
+      el.fairnessTotalRecords.textContent = formatNumber(records.length);
+      el.fairnessTotalNurses.textContent = formatNumber(nurseStats.length);
+      el.fairnessTotalHours.textContent = `${formatNumber(totalDays)} 天`;
+      el.recordCountDisplay.value = state.fairness.isLoading
+        ? '查詢中'
+        : `${formatNumber(records.length)} 筆`;
+      el.fairnessStationCount.textContent = `${formatNumber(stationStats.length)} 站`;
+      el.fairnessNurseCount.textContent = `${formatNumber(nurseStats.length)} 人`;
+
+      el.fairnessStationBody.innerHTML = stationStats.length
+        ? stationStats.map(buildFairnessStationRowHtml).join('')
+        : '<tr><td colspan="5" class="muted">目前沒有符合條件的駐站徵調統計。</td></tr>';
+      el.fairnessNurseBody.innerHTML = nurseStats.length
+        ? nurseStats.map(buildFairnessNurseRowHtml).join('')
+        : '<tr><td colspan="5" class="muted">目前沒有符合條件的護理師徵調統計。</td></tr>';
+
+      if (el.exportRecordsBtn) {
+        el.exportRecordsBtn.disabled = state.fairness.isLoading || !state.fairness.ready;
+      }
+    }
+
+    function buildFairnessStationRowHtml(stat) {
+      const station = {
+        code: stat.stationCode,
+        name: stat.stationName || stat.stationCode
+      };
+      const incomingDays = Number(stat.incomingDays || 0);
+      const outgoingDays = Number(stat.outgoingDays || 0);
+      const tooltip = [
+        stat.stationName || stat.stationCode || '未命名駐站',
+        `調入 ${formatNumber(stat.incomingCount)} 次 / ${formatDaysText(incomingDays)}`,
+        `調出 ${formatNumber(stat.outgoingCount)} 次 / ${formatDaysText(outgoingDays)}`,
+        `合計 ${formatNumber(stat.totalCount)} 次 / ${formatDaysText(incomingDays + outgoingDays)}`,
+        `涉及人員 ${formatNumber(stat.nurseCount)} 人`
+      ].join('\n');
+      return `
+        <tr title="${escapeHtml(tooltip)}">
+          <td title="${escapeHtml(stat.stationName || stat.stationCode || '未命名駐站')}">${buildStationLabelHtml(station, stat.stationName || stat.stationCode || '未命名駐站')}</td>
+          <td>
+            <div class="cell-main">${escapeHtml(formatNumber(stat.incomingCount))}</div>
+            <div class="cell-sub">${escapeHtml(formatDaysText(incomingDays))}</div>
+          </td>
+          <td>
+            <div class="cell-main">${escapeHtml(formatNumber(stat.outgoingCount))}</div>
+            <div class="cell-sub">${escapeHtml(formatDaysText(outgoingDays))}</div>
+          </td>
+          <td>
+            <div class="cell-main"><strong>${escapeHtml(formatNumber(stat.totalCount))}</strong></div>
+          </td>
+          <td>
+            <div class="cell-main">${escapeHtml(formatDaysText(incomingDays + outgoingDays))}</div>
+          </td>
+        </tr>
+      `;
+    }
+
+    function buildFairnessNurseRowHtml(stat) {
+      const sourceStation = {
+        code: stat.originalStationCode,
+        name: stat.originalStationName || stat.originalStationCode
+      };
+      const sourceName = stat.originalStationName || stat.originalStationCode || '未命名原駐站';
+      const targetSummary = stat.targetStationSummary || '';
+      const tooltip = [
+        stat.nurseName || stat.nurseEmail || '未命名人員',
+        stat.nurseEmail || '',
+        `原駐站：${sourceName}`,
+        targetSummary ? `至：${targetSummary}` : '',
+        `徵調 ${formatNumber(stat.dispatchCount)} 次 / ${formatDaysText(stat.dispatchDays)}`,
+        stat.latestEndDate ? `最近迄日：${stat.latestEndDate}` : '',
+        stat.nextAllowedDate ? `下次可調派：${stat.nextAllowedDate}` : ''
+      ].filter(Boolean).join('\n');
+      return `
+        <tr title="${escapeHtml(tooltip)}">
+          <td title="${escapeHtml([stat.nurseName || stat.nurseEmail || '未命名人員', stat.nurseEmail || ''].filter(Boolean).join('\n'))}">
+            <div class="cell-main">${escapeHtml(stat.nurseName || stat.nurseEmail || '未命名人員')}</div>
+          </td>
+          <td title="${escapeHtml([`原駐站：${sourceName}`, targetSummary ? `至：${targetSummary}` : ''].filter(Boolean).join('\n'))}">
+            ${buildStationLabelHtml(sourceStation, sourceName)}
+          </td>
+          <td><strong>${escapeHtml(formatNumber(stat.dispatchCount))}</strong></td>
+          <td>${escapeHtml(formatNumber(stat.dispatchDays))}</td>
+          <td>
+            <div class="cell-main">${escapeHtml(stat.nextAllowedDate || '-')}</div>
+          </td>
+        </tr>
+      `;
+    }
+
+    function setFairnessLoading(isLoading) {
+      if (el.fairnessLoadBtn) {
+        el.fairnessLoadBtn.disabled = isLoading;
+        el.fairnessLoadBtn.textContent = isLoading ? '查詢中' : '查詢統計';
+      }
+      if (el.recordCountDisplay && isLoading) {
+        el.recordCountDisplay.value = '查詢中';
+      } else if (el.recordCountDisplay) {
+        const records = Array.isArray(state.fairness.records) ? state.fairness.records : [];
+        el.recordCountDisplay.value = state.fairness.ready ? `${formatNumber(records.length)} 筆` : '尚未查詢';
+      }
+      if (el.exportRecordsBtn) {
+        el.exportRecordsBtn.disabled = isLoading || !state.fairness.ready;
+      }
     }
 
     function renderScheduleMatrix() {
@@ -2413,10 +3256,11 @@
       const unavailableText = Number(station.unavailableMemberCount || 0) > 0
         ? `<div class="cell-sub">排除 ${escapeHtml(formatNumber(station.unavailableMemberCount))} 人</div>`
         : '';
+      const labelHtml = buildStationLabelHtml(station, `${displayName}（${formatNumber(currentCount)}）`);
       return `
         <tr>
           <td class="station-cell">
-            <div class="cell-main">${escapeHtml(displayName)}（${escapeHtml(formatNumber(currentCount))}）</div>
+            <div class="cell-main">${labelHtml}</div>
             <div class="cell-sub">可用人力 ${escapeHtml(formatNumber(station.memberCount))} 人</div>
             ${unavailableText}
             <div class="cell-sub">即時在站 ${escapeHtml(formatNumber(currentCount))} 人</div>
@@ -2440,6 +3284,7 @@
 
       const adjustedCount = Math.max(0, baseCount - outgoingKeys.size + incomingKeys.size);
       const className = buildScheduleCellClassName(adjustedCount, movements.length);
+      const countClassName = buildScheduleCountClassName(adjustedCount, movements.length);
       const countText = baseCount === adjustedCount
         ? `人數 ${formatNumber(baseCount)}`
         : `人數 ${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
@@ -2447,7 +3292,7 @@
 
       return {
         className,
-        html: `<div class="schedule-count">${escapeHtml(countText)}</div>${movementHtml}`
+        html: `<div class="${countClassName}">${escapeHtml(countText)}</div>${movementHtml}`
       };
     }
 
@@ -2457,23 +3302,104 @@
       const movements = getMonthlyMovementRecords(stationCode, month);
       const incomingKeys = new Set();
       const outgoingKeys = new Set();
+      const incomingRecords = [];
+      const outgoingRecords = [];
+      let incomingDays = 0;
+      let outgoingDays = 0;
 
       movements.forEach((record) => {
-        if (record.stationCode === stationCode) incomingKeys.add(record.assignmentKey);
-        if (record.originalStationCode === stationCode) outgoingKeys.add(record.assignmentKey);
+        const overlapRange = getRecordOverlapRange(record, month.start, month.end);
+        const overlapDays = overlapRange ? countDateRangeDays(overlapRange.start, overlapRange.end) : 0;
+        if (record.stationCode === stationCode) {
+          incomingKeys.add(record.assignmentKey);
+          incomingRecords.push(record);
+          incomingDays += overlapDays;
+        }
+        if (record.originalStationCode === stationCode) {
+          outgoingKeys.add(record.assignmentKey);
+          outgoingRecords.push(record);
+          outgoingDays += overlapDays;
+        }
       });
 
       const adjustedCount = Math.max(0, baseCount - outgoingKeys.size + incomingKeys.size);
       const className = buildScheduleCellClassName(adjustedCount, movements.length);
       const countText = baseCount === adjustedCount
-        ? `人數 ${formatNumber(baseCount)}`
-        : `人數 ${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
-      const movementHtml = buildGroupedMovementEntriesHtml(movements, stationCode, month.start, month.end);
+        ? formatNumber(baseCount)
+        : `${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
+      const title = buildMonthlyScheduleCellTitle({
+        month,
+        station,
+        baseCount,
+        adjustedCount,
+        incomingRecords,
+        outgoingRecords,
+        incomingDays,
+        outgoingDays
+      });
+      const flowHtml = movements.length
+        ? `
+          <div class="month-flow-line">
+            <span class="month-flow-pill is-in">入 ${escapeHtml(formatNumber(incomingKeys.size))}</span>
+            <span class="month-flow-pill is-out">出 ${escapeHtml(formatNumber(outgoingKeys.size))}</span>
+          </div>
+          <div class="month-days-line">${escapeHtml(formatNumber(incomingDays + outgoingDays))} 天</div>
+        `
+        : '';
 
       return {
         className,
-        html: `<div class="schedule-count">${escapeHtml(countText)}</div>${movementHtml}`
+        html: `
+          <div class="month-cell-summary" title="${escapeHtml(title)}">
+            <div class="month-count-line">
+              <span>人數</span>
+              <strong>${escapeHtml(countText)}</strong>
+            </div>
+            ${flowHtml}
+          </div>
+        `
       };
+    }
+
+    function buildMonthlyScheduleCellTitle(summary) {
+      const month = summary.month || {};
+      const station = summary.station || {};
+      const incomingRecords = Array.isArray(summary.incomingRecords) ? summary.incomingRecords : [];
+      const outgoingRecords = Array.isArray(summary.outgoingRecords) ? summary.outgoingRecords : [];
+      const lines = [
+        `${getStationDisplayName(station)}｜${month.label || ''}`,
+        `人數：${formatNumber(summary.baseCount)} → ${formatNumber(summary.adjustedCount)}`,
+        `調入：${formatNumber(incomingRecords.length)} 筆 / ${formatDaysText(summary.incomingDays)}`,
+        `調出：${formatNumber(outgoingRecords.length)} 筆 / ${formatDaysText(summary.outgoingDays)}`
+      ];
+
+      if (incomingRecords.length) {
+        lines.push('', '調入明細：');
+        lines.push(...incomingRecords.slice(0, 8).map((record) => buildMonthlyMovementTitleLine(record, 'in', month)));
+        if (incomingRecords.length > 8) lines.push(`另 ${formatNumber(incomingRecords.length - 8)} 筆調入`);
+      }
+
+      if (outgoingRecords.length) {
+        lines.push('', '調出明細：');
+        lines.push(...outgoingRecords.slice(0, 8).map((record) => buildMonthlyMovementTitleLine(record, 'out', month)));
+        if (outgoingRecords.length > 8) lines.push(`另 ${formatNumber(outgoingRecords.length - 8)} 筆調出`);
+      }
+
+      return lines.filter(Boolean).join('\n');
+    }
+
+    function buildMonthlyMovementTitleLine(record, direction, month) {
+      const overlapRange = getRecordOverlapRange(record, month.start, month.end) || getRecordDateRange(record);
+      const relatedStation = direction === 'in'
+        ? getRecordOriginalStationDisplayName(record)
+        : getRecordTargetStationDisplayName(record);
+      const relatedPrefix = direction === 'in' ? '原' : '至';
+      return [
+        formatDateRange(overlapRange.start, overlapRange.end),
+        record.nurseName || record.nurseEmail || '未命名人員',
+        formatDaysText(countDateRangeDays(overlapRange.start, overlapRange.end)),
+        `${relatedPrefix}：${relatedStation}`
+      ].filter(Boolean).join(' ');
     }
 
     function buildWeeklyScheduleCellData(station, week) {
@@ -2490,14 +3416,15 @@
 
       const adjustedCount = Math.max(0, baseCount - outgoingKeys.size + incomingKeys.size);
       const className = buildScheduleCellClassName(adjustedCount, movements.length);
+      const countClassName = buildScheduleCountClassName(adjustedCount, movements.length);
       const countText = baseCount === adjustedCount
         ? `人數 ${formatNumber(baseCount)}`
         : `人數 ${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
-      const movementHtml = movements.map((record) => buildMovementEntryHtml(record, stationCode, week.start, week.end)).join('');
+      const movementHtml = buildGroupedMovementEntriesHtml(movements, stationCode, week.start, week.end);
 
       return {
         className,
-        html: `<div class="schedule-count">${escapeHtml(countText)}</div>${movementHtml}`
+        html: `<div class="${countClassName}">${escapeHtml(countText)}</div>${movementHtml}`
       };
     }
 
@@ -2507,6 +3434,86 @@
       if (adjustedCount >= 3) classes.push('is-green');
       if (adjustedCount === 2) classes.push('is-red');
       return classes.join(' ');
+    }
+
+    function buildScheduleCountClassName(adjustedCount, movementCount) {
+      return ['schedule-count', buildScheduleCellClassName(adjustedCount, movementCount)]
+        .filter(Boolean)
+        .join(' ');
+    }
+
+    function buildStationLabelHtml(stationOrCode, text) {
+      return `
+        <span class="station-label">
+          ${buildStationColorSwatchHtml(stationOrCode)}
+          <span>${escapeHtml(text)}</span>
+        </span>
+      `;
+    }
+
+    function buildRelatedStationTextHtml(prefix, stationName) {
+      return `<span>${escapeHtml(prefix)}：${escapeHtml(stationName || '未命名駐站')}</span>`;
+    }
+
+    function buildTemporaryStationGroupTitleHtml(stationCode, stationName) {
+      const station = getStationByCode(stationCode) || {
+        code: stationCode,
+        name: stationName
+      };
+      const displayName = stationName || getStationDisplayName(station);
+      return `
+        <div class="movement-group-title">
+          ${buildStationColorSwatchHtml(station)}
+          <span>${escapeHtml(displayName)}</span>
+        </div>
+      `;
+    }
+
+    function buildStationColorSwatchHtml(stationOrCode) {
+      return `<span class="station-color-swatch ${getStationColorClass(stationOrCode)}" aria-hidden="true"></span>`;
+    }
+
+    function getStationColorClass(stationOrCode) {
+      return `station-color-${getStationColorIndex(stationOrCode)}`;
+    }
+
+    function getStationColorIndex(stationOrCode) {
+      const knownStation = typeof stationOrCode === 'string'
+        ? getStationByCode(stationOrCode)
+        : stationOrCode;
+      const stationCode = String(
+        typeof stationOrCode === 'string'
+          ? stationOrCode
+          : (stationOrCode && stationOrCode.code || '')
+      ).trim();
+      const stationName = String(
+        knownStation && (knownStation.scheduleLabel || knownStation.name)
+        || getScheduleStationLabelByCode(stationCode)
+        || stationCode
+      ).trim();
+      const normalizedName = normalizeStationText(stationName);
+      const scheduleIndex = getScheduleStations().findIndex((station) => {
+        if (!station) return false;
+        if (stationCode && station.code === stationCode) return true;
+        return normalizedName
+          && normalizeStationText(station.scheduleLabel || getStationDisplayName(station)) === normalizedName;
+      });
+
+      if (scheduleIndex >= 0) return scheduleIndex % STATION_COLOR_CLASS_COUNT;
+
+      const displayOrder = getStationDisplayOrder(knownStation || {
+        code: stationCode,
+        name: stationName
+      });
+      if (displayOrder < 1000) return displayOrder % STATION_COLOR_CLASS_COUNT;
+
+      return hashText(stationCode || stationName) % STATION_COLOR_CLASS_COUNT;
+    }
+
+    function hashText(value) {
+      return String(value || '').split('').reduce((sum, char) => (
+        (sum * 31 + char.charCodeAt(0)) >>> 0
+      ), 0);
     }
 
     function getScheduleStations() {
@@ -2606,68 +3613,97 @@
     }
 
     function buildGroupedMovementEntriesHtml(records, stationCode, rangeStart, rangeEnd) {
-      const groups = new Map();
+      const incomingStationGroups = new Map();
+      const outgoingGroups = new Map();
 
       records.forEach((record) => {
         const overlapRange = getRecordOverlapRange(record, rangeStart, rangeEnd);
         if (!overlapRange) return;
         const isIncoming = record.stationCode === stationCode;
-        const direction = isIncoming ? '+1 調入' : '-1 調出';
-        const relatedText = isIncoming
-          ? `原：${getRecordOriginalStationDisplayName(record)}`
-          : `至：${getRecordTargetStationDisplayName(record)}`;
+        const sourceStationCode = record.originalStationCode || '';
+        const sourceStationName = getRecordOriginalStationDisplayName(record);
+        const targetStationName = getRecordTargetStationDisplayName(record);
         const key = [
-          direction,
+          isIncoming ? 'in' : 'out',
           record.assignmentKey || record.nurseEmail || '',
-          relatedText
+          isIncoming ? sourceStationCode : record.stationCode
         ].join('::');
 
-        if (!groups.has(key)) {
-          groups.set(key, {
-            direction,
-            relatedText,
+        if (isIncoming && !incomingStationGroups.has(sourceStationCode)) {
+          incomingStationGroups.set(sourceStationCode, {
+            stationCode: sourceStationCode,
+            stationName: sourceStationName,
+            entries: new Map()
+          });
+        }
+        const incomingStationGroup = incomingStationGroups.get(sourceStationCode);
+        const targetMap = isIncoming ? incomingStationGroup.entries : outgoingGroups;
+        if (!targetMap.has(key)) {
+          targetMap.set(key, {
+            isIncoming,
+            direction: isIncoming ? '+1 調入' : '-1 調出',
             className: isIncoming ? 'movement-in' : 'movement-out',
             nurseName: record.nurseName || record.nurseEmail || '',
+            sourceStationName,
+            targetStationName,
             ranges: [],
             days: 0,
             hours: 0
           });
         }
-        const group = groups.get(key);
+        const group = targetMap.get(key);
         group.ranges.push(overlapRange);
         const overlapDays = countDateRangeDays(overlapRange.start, overlapRange.end);
         group.days += overlapDays;
         group.hours += getDispatchHoursForDays(record, overlapDays);
       });
 
-      return Array.from(groups.values()).map((group) => {
-        const dateText = formatRangeList(group.ranges);
-        const mainText = `${dateText} ${group.direction} ${group.nurseName}`;
-        return `
-          <div class="movement-entry ${group.className}">
-            <div>${escapeHtml(mainText)}</div>
-            <div class="cell-sub">${escapeHtml(formatDispatchStats(group.days, group.hours))}</div>
-            <div class="cell-sub">${escapeHtml(group.relatedText)}</div>
-          </div>
-        `;
-      }).join('');
+      return [
+        ...Array.from(outgoingGroups.values()).map(buildMovementEntryHtml),
+        ...Array.from(incomingStationGroups.values())
+          .sort(compareMovementStationGroups)
+          .map(buildIncomingStationGroupHtml)
+      ].join('');
     }
 
-    function buildMovementEntryHtml(record, stationCode, rangeStart, rangeEnd) {
-      const overlapRange = getRecordOverlapRange(record, rangeStart, rangeEnd) || getRecordDateRange(record);
-      const overlapDays = countDateRangeDays(overlapRange.start, overlapRange.end);
-      const isIncoming = record.stationCode === stationCode;
-      const direction = isIncoming ? '+1 調入' : '-1 調出';
-      const relatedText = isIncoming
-        ? `原：${getRecordOriginalStationDisplayName(record)}`
-        : `至：${getRecordTargetStationDisplayName(record)}`;
-      const className = isIncoming ? 'movement-in' : 'movement-out';
-      const mainText = `${formatDateRange(overlapRange.start, overlapRange.end)} ${direction} ${record.nurseName || record.nurseEmail}`;
+    function buildIncomingStationGroupHtml(stationGroup) {
+      const entriesHtml = Array.from(stationGroup.entries.values())
+        .map((group) => buildMovementEntryInnerHtml(group))
+        .join('');
       return `
-        <div class="movement-entry ${className}">
+        <div class="movement-station-group movement-in">
+          ${buildTemporaryStationGroupTitleHtml(stationGroup.stationCode, stationGroup.stationName)}
+          ${entriesHtml}
+        </div>
+      `;
+    }
+
+    function compareMovementStationGroups(a, b) {
+      return compareStationsByDisplayOrder(
+        { code: a && a.stationCode, name: a && a.stationName },
+        { code: b && b.stationCode, name: b && b.stationName }
+      );
+    }
+
+    function buildMovementEntryHtml(group) {
+      return `
+        <div class="movement-out-line">
+          ${buildMovementEntryInnerHtml(group, buildRelatedStationTextHtml('至', group.targetStationName))}
+        </div>
+      `;
+    }
+
+    function buildMovementEntryInnerHtml(group, relatedHtml) {
+      const dateText = formatRangeList(group.ranges);
+      const mainText = `${dateText} ${group.direction} ${group.nurseName}`;
+      const relatedLineHtml = relatedHtml
+        ? `<div class="cell-sub">${relatedHtml}</div>`
+        : '';
+      return `
+        <div class="${group.isIncoming ? 'movement-group-item' : ''}">
           <div>${escapeHtml(mainText)}</div>
-          <div class="cell-sub">${escapeHtml(formatDispatchStats(overlapDays, getDispatchHoursForDays(record, overlapDays)))}</div>
-          <div class="cell-sub">${escapeHtml(relatedText)}</div>
+          <div class="cell-sub">${escapeHtml(formatDispatchStats(group.days, group.hours))}</div>
+          ${relatedLineHtml}
         </div>
       `;
     }
@@ -2777,7 +3813,12 @@
     }
 
     function renderRecords() {
-      if (!state.records.length) {
+      if (!el.recordsEmpty || !el.recordsTableWrap || !el.recordsBody) return;
+      const records = getDisplayedRecords();
+      if (!records.length) {
+        el.recordsEmpty.textContent = state.fairness.ready
+          ? '目前沒有符合條件的年度臨時徵調紀錄。'
+          : '請先查詢年度臨時徵調統計。';
         el.recordsEmpty.classList.remove('hidden');
         el.recordsTableWrap.classList.add('hidden');
         el.recordsBody.innerHTML = '';
@@ -2787,7 +3828,7 @@
       el.recordsEmpty.classList.add('hidden');
       el.recordsTableWrap.classList.remove('hidden');
       const editingRecordId = el.recordId.value || '';
-      el.recordsBody.innerHTML = state.records.map((record) => {
+      el.recordsBody.innerHTML = records.map((record) => {
         const temporaryInfo = getTemporaryDispatchInfo(record);
         const isEditing = Boolean(editingRecordId && record.id === editingRecordId);
         return `
@@ -2806,11 +3847,9 @@
             <td>
               ${temporaryInfo.isTemporary ? '<span class="temp-badge">臨時調配</span>' : '<span class="muted">-</span>'}
               ${temporaryInfo.source ? `<div class="cell-sub">原：${escapeHtml(temporaryInfo.source)}</div>` : ''}
-              ${temporaryInfo.isTemporary ? `<div class="cell-sub">${escapeHtml(formatDispatchStats(getDispatchDays(record), getDispatchTotalHours(record)))}</div>` : ''}
             </td>
             <td>${escapeHtml(record.shiftName || '')}</td>
-            <td>${escapeHtml(formatTimeRange(record))}</td>
-            <td><strong>${escapeHtml(formatNumber(getRecordWorkHours(record)))}</strong></td>
+            <td><strong>${escapeHtml(formatDaysText(getDispatchDays(record)))}</strong></td>
             <td>${escapeHtml(record.note || '')}</td>
             <td>
               <div class="actions">
@@ -2830,50 +3869,94 @@
       });
     }
 
+    function getDisplayedRecords() {
+      return state.fairness.ready
+        ? (Array.isArray(state.fairness.records) ? state.fairness.records : [])
+        : [];
+    }
+
+    function getRecordById(id) {
+      return state.recordById.get(id)
+        || getDisplayedRecords().find((record) => record && record.id === id)
+        || null;
+    }
+
     function exportRecordsToExcel() {
-      if (!state.records.length) {
-        setRecordsStatus('目前沒有可輸出的調派紀錄。', 'error');
+      if (!state.fairness.ready) {
+        setRecordsStatus('請先查詢年度臨時徵調統計，再輸出 Excel。', 'error');
         return;
       }
 
-      const filters = collectFilters();
+      const records = getDisplayedRecords();
+      const stationStats = Array.isArray(state.fairness.stationStats) ? state.fairness.stationStats : [];
+      const nurseStats = Array.isArray(state.fairness.nurseStats) ? state.fairness.nurseStats : [];
+      if (!records.length && !stationStats.length && !nurseStats.length) {
+        setRecordsStatus('目前沒有可輸出的年度臨時徵調統計。', 'error');
+        return;
+      }
+
+      const filters = {
+        year: state.fairness.year,
+        dateFrom: state.fairness.dateFrom,
+        dateTo: state.fairness.dateTo,
+        stationCode: state.fairness.stationCode,
+        nurseEmail: state.fairness.nurseEmail
+      };
       const rows = [
-        ['查詢起日', filters.dateFrom || ''],
-        ['查詢迄日', filters.dateTo || ''],
-        ['查詢駐站', getFilterStationDisplayText(filters.stationCode)],
+        ['年度臨時徵調公平性統計'],
+        ['統計年度', filters.year || ''],
+        ['統計區間', `${filters.dateFrom || ''} 至 ${filters.dateTo || ''}`],
+        ['查詢駐站', getFairnessStationDisplayText(filters.stationCode)],
         ['查詢護理師', getFilterNurseDisplayText(filters.nurseEmail)],
+        ['臨時徵調紀錄', formatNumber(records.length)],
+        ['涉及護理師', formatNumber(nurseStats.length)],
+        ['累計天數', formatNumber(records.reduce((sum, record) => sum + getDispatchDays(record), 0))],
         [],
-        ['調派期間', '調派駐站', '護理師', '護理師信箱', '原駐站', '臨時調配', '班別', '時間', '時數', '備註', '最後異動時間', '最後異動人員']
+        ['各駐站臨時徵調次數'],
+        ['駐站', '調入次數', '調出次數', '合計次數', '涉及人員', '調入天數', '調出天數', '合計天數']
       ];
 
-      state.records.forEach((record) => {
-        const temporaryInfo = getTemporaryDispatchInfo(record);
+      stationStats.forEach((stat) => {
         rows.push([
-          formatDispatchDateRange(record),
-          getRecordTargetStationDisplayName(record),
-          record.nurseName || '',
-          record.nurseEmail || '',
-          getRecordOriginalStationDisplayName(record),
-          temporaryInfo.isTemporary ? '是' : '否',
-          record.shiftName || '',
-          formatTimeRange(record),
-          formatNumber(getRecordWorkHours(record)),
-          record.note || '',
-          record.updatedAt || record.createdAt || '',
-          record.updatedBy || record.createdBy || ''
+          stat.stationName || stat.stationCode || '',
+          formatNumber(stat.incomingCount),
+          formatNumber(stat.outgoingCount),
+          formatNumber(stat.totalCount),
+          formatNumber(stat.nurseCount),
+          formatNumber(stat.incomingDays),
+          formatNumber(stat.outgoingDays),
+          formatNumber(Number(stat.incomingDays || 0) + Number(stat.outgoingDays || 0))
         ]);
       });
 
-      const blob = buildXlsxWorkbookBlob(rows, '調派紀錄');
+      rows.push(
+        [],
+        ['護理師個人徵調次數'],
+        ['護理師', '護理師信箱', '原駐站', '徵調次數', '徵調天數', '調派目的駐站', '最近迄日', '下次可調派日']
+      );
+      nurseStats.forEach((stat) => {
+        rows.push([
+          stat.nurseName || '',
+          stat.nurseEmail || '',
+          stat.originalStationName || stat.originalStationCode || '',
+          formatNumber(stat.dispatchCount),
+          formatNumber(stat.dispatchDays),
+          stat.targetStationSummary || '',
+          stat.latestEndDate || '',
+          stat.nextAllowedDate || ''
+        ]);
+      });
+
+      const blob = buildXlsxWorkbookBlob(rows, '年度徵調統計');
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = buildRecordsExportFileName(filters);
+      link.download = buildFairnessExportFileName(filters);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.setTimeout(() => URL.revokeObjectURL(url), 500);
-      setRecordsStatus(`已輸出 ${formatNumber(state.records.length)} 筆調派紀錄。`, 'success');
+      setRecordsStatus(`已輸出年度臨時徵調統計：${formatNumber(stationStats.length)} 站、${formatNumber(nurseStats.length)} 人。`, 'success');
     }
 
     function buildXlsxWorkbookBlob(rows, sheetName) {
@@ -3095,9 +4178,24 @@
       return `調派紀錄_${from}_${to}.xlsx`;
     }
 
+    function buildFairnessExportFileName(filters) {
+      const year = normalizeYear(filters && filters.year);
+      const stationText = getFairnessStationDisplayText(filters && filters.stationCode)
+        .replace(/[\\\/?*\[\]:\s｜]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      return `年度臨時徵調統計_${year}_${stationText || '全部駐站'}.xlsx`;
+    }
+
     function getFilterStationDisplayText(stationCode) {
       if (!stationCode) return '全部駐站';
       const station = getStationByCode(stationCode);
+      return station ? getStationDisplayName(station) : stationCode;
+    }
+
+    function getFairnessStationDisplayText(stationCode) {
+      if (!stationCode) return '全部駐站';
+      const station = getStationByCode(stationCode)
+        || getFairnessStationOptions().find((item) => item.code === stationCode);
       return station ? getStationDisplayName(station) : stationCode;
     }
 
@@ -3195,7 +4293,7 @@
     }
 
     function editRecord(id) {
-      const record = state.recordById.get(id);
+      const record = getRecordById(id);
       if (!record) return;
 
       el.recordId.value = record.id;
@@ -3208,6 +4306,7 @@
       el.dispatchStartDate.value = getRecordStartDate(record);
       el.dispatchEndDate.value = getRecordEndDate(record);
       el.stationSelect.value = record.stationCode;
+      syncStationPicker();
       el.shiftName.value = normalizeDispatchMode(record.shiftName || state.shiftOptions[0]);
       renderShiftOptions();
       renderOriginStationOptions(record.originalStationCode || '');
@@ -3249,7 +4348,7 @@
     }
 
     async function deleteRecord(id) {
-      const record = state.recordById.get(id);
+      const record = getRecordById(id);
       if (!record) return;
       const confirmed = window.confirm(`確定刪除 ${formatDispatchDateRange(record)} ${record.nurseName || record.nurseEmail} 的工時調派？`);
       if (!confirmed) return;
@@ -3291,6 +4390,7 @@
       el.nurseOriginStation.value = '';
       const orderedStations = getOrderedStations();
       if (orderedStations[0]) el.stationSelect.value = orderedStations[0].code;
+      syncStationPicker();
       if (state.shiftOptions[0]) el.shiftName.value = state.shiftOptions[0];
       renderShiftOptions();
       renderOriginStationOptions();
@@ -3310,6 +4410,36 @@
         nurseEmail: el.filterNurse.value,
         testMode: state.testMode
       };
+    }
+
+    function collectFairnessFilters() {
+      const year = updateFairnessRange();
+      return {
+        year,
+        stationCode: el.fairnessStation.value || '',
+        nurseEmail: el.fairnessNurse.value || '',
+        testMode: state.testMode
+      };
+    }
+
+    function updateFairnessRange() {
+      const year = normalizeYear(el.fairnessYear && el.fairnessYear.value);
+      state.fairness.year = year;
+      state.fairness.dateFrom = `${year}-01-01`;
+      state.fairness.dateTo = `${year}-12-31`;
+      if (el.fairnessYear) el.fairnessYear.value = year;
+      if (el.fairnessRange) el.fairnessRange.value = `${year}/01/01 - ${year}/12/31`;
+      return year;
+    }
+
+    function markFairnessFiltersDirty() {
+      if (!state.fairness.ready) return;
+      state.fairness.ready = false;
+      state.fairness.stationStats = [];
+      state.fairness.nurseStats = [];
+      state.fairness.records = [];
+      renderFairnessStats();
+      setRecordsStatus('年度統計條件已變更，請按「查詢統計」更新結果。');
     }
 
     function inferScheduleYear() {
@@ -3468,6 +4598,10 @@
 
     function formatDispatchStats(days, hours) {
       return `${formatNumber(days)}天｜${formatNumber(hours)}h`;
+    }
+
+    function formatDaysText(days) {
+      return `${formatNumber(days)} 天`;
     }
 
     function getRecordYear(record) {
@@ -3719,7 +4853,11 @@
       }
       el.reloadBtn.disabled = isLoading;
       el.reloadBtn.textContent = isLoading ? '查詢中' : '查詢';
-      if (el.exportRecordsBtn) el.exportRecordsBtn.disabled = isLoading;
+      if (el.fairnessLoadBtn) el.fairnessLoadBtn.disabled = isLoading || state.fairness.isLoading;
+      if (el.exportRecordsBtn) el.exportRecordsBtn.disabled = isLoading || state.fairness.isLoading || !state.fairness.ready;
+      if (el.testModeBtn && !el.testModeBtn.classList.contains('hidden')) {
+        el.testModeBtn.disabled = isLoading;
+      }
     }
 
     function showLoadError(message) {

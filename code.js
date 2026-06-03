@@ -10,6 +10,7 @@ const APP_CONFIG = {
   chunkSize: 8000,
   maxRecords: 3000,
   defaultRangeDays: 31,
+  temporaryDispatchCooldownDays: 30,
   maxHoursPerRecord: 24,
   fullShiftBreakHours: 1,
   fullShiftBreakThresholdHours: 8,
@@ -120,6 +121,59 @@ function getDispatchAppData(payload) {
   }
 }
 
+function getDispatchFairnessStats(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    if (!viewerEmail) {
+      throw new Error('無法辨識目前登入帳號。');
+    }
+
+    const year = normalizeYear_(payload && payload.year);
+    const filters = {
+      dateFrom: `${year}-01-01`,
+      dateTo: `${year}-12-31`,
+      stationCode: normalizeOrgCode_(payload && payload.stationCode),
+      nurseEmail: normalizeEmail_(payload && payload.nurseEmail)
+    };
+    const source = loadDispatchSource_();
+    const context = buildDispatchContext_(source, viewerEmail, {
+      testMode: Boolean(payload && payload.testMode)
+    });
+    const allowedStationCodes = new Set(context.stations.map((station) => station.code));
+    const assignmentAvailabilityByKey = buildAssignmentAvailabilityByKey_(source.assignments);
+    const records = loadDispatchRecords_(allowedStationCodes, {
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      stationCode: '',
+      nurseEmail: filters.nurseEmail
+    }, {
+      includeOriginalStation: true,
+      assignmentAvailabilityByKey
+    })
+      .filter((record) => isTemporaryDispatchRecord_(record))
+      .filter((record) => !filters.stationCode || record.stationCode === filters.stationCode || record.originalStationCode === filters.stationCode);
+
+    return {
+      success: true,
+      year,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      filters,
+      cooldownDays: APP_CONFIG.temporaryDispatchCooldownDays,
+      stationStats: buildFairnessStationStats_(records, context.stations),
+      nurseStats: buildFairnessNurseStats_(records),
+      records
+    };
+  } catch (error) {
+    console.error('讀取年度臨時徵調統計失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法讀取年度臨時徵調統計。'
+    };
+  }
+}
+
 function saveWorkHourDispatch(payload) {
   const viewerEmail = normalizeEmail_(getCurrentUserEmail());
   const lock = LockService.getScriptLock();
@@ -150,6 +204,7 @@ function saveWorkHourDispatch(payload) {
       throw new Error('找不到要編輯的調派紀錄。請先按「重新整理」查看最新調派內容。');
     }
     assertNoOverlappingNurseDispatch_(normalized, records);
+    assertTemporaryDispatchCooldown_(normalized, records);
     const previousAssignmentKey = existingIndex >= 0 ? records[existingIndex].assignmentKey : '';
     const now = formatTimestamp_(new Date());
 
@@ -235,6 +290,7 @@ function saveWorkHourDispatchBatch(payload) {
 
     normalizedRecords.forEach((normalized) => {
       assertNoOverlappingNurseDispatch_(normalized, records.concat(pendingRecords));
+      assertTemporaryDispatchCooldown_(normalized, records.concat(pendingRecords));
       pendingRecords.push({
         ...normalized,
         id: Utilities.getUuid(),
@@ -1242,6 +1298,209 @@ function assertNoOverlappingNurseDispatch_(target, records) {
   ].join('\n'));
 }
 
+function assertTemporaryDispatchCooldown_(target, records) {
+  if (!isTemporaryDispatchRecord_(target)) return;
+
+  const conflict = (Array.isArray(records) ? records : [])
+    .map(normalizeStoredDispatchRecord_)
+    .filter((record) => (
+      record
+      && record.status === '有效'
+      && record.assignmentKey === target.assignmentKey
+      && record.id !== target.id
+      && isTemporaryDispatchRecord_(record)
+      && !hasTemporaryDispatchCooldownGap_(record, target)
+    ))
+    .sort(compareTemporaryDispatchCooldownConflicts_(target))[0];
+
+  if (!conflict) return;
+
+  const nextAllowedDate = getNextTemporaryDispatchAllowedDate_(conflict, target);
+  throw new Error([
+    `臨時調派間隔未滿 ${APP_CONFIG.temporaryDispatchCooldownDays} 天：${target.nurseName || target.nurseEmail || '未命名人員'}。`,
+    `既有臨時調派：${formatDispatchDateRange_(conflict.startDate, conflict.endDate)} ${conflict.originalStationName || conflict.originalStationCode} → ${conflict.stationName || conflict.stationCode}`,
+    `本次臨時調派：${formatDispatchDateRange_(target.startDate, target.endDate)} ${target.originalStationName || target.originalStationCode} → ${target.stationName || target.stationCode}`,
+    nextAllowedDate ? `下一次最早可安排日期：${nextAllowedDate}` : ''
+  ].filter(Boolean).join('\n'));
+}
+
+function buildFairnessStationStats_(records, stations) {
+  const stationMap = new Map();
+  (Array.isArray(stations) ? stations : []).forEach((station) => {
+    if (!station || !station.code) return;
+    stationMap.set(station.code, createFairnessStationStat_(station.code, station.name || station.code));
+  });
+
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const days = getDispatchDays_(record);
+    const hours = getDispatchTotalHours_(record);
+    const targetCode = normalizeOrgCode_(record.stationCode);
+    const sourceCode = normalizeOrgCode_(record.originalStationCode);
+    if (targetCode) {
+      const targetStat = getFairnessStationStat_(stationMap, targetCode, record.stationName || targetCode);
+      targetStat.incomingCount += 1;
+      targetStat.incomingDays += days;
+      targetStat.incomingHours += hours;
+      if (record.assignmentKey) targetStat.nurseKeys.add(record.assignmentKey);
+    }
+    if (sourceCode) {
+      const sourceStat = getFairnessStationStat_(stationMap, sourceCode, record.originalStationName || sourceCode);
+      sourceStat.outgoingCount += 1;
+      sourceStat.outgoingDays += days;
+      sourceStat.outgoingHours += hours;
+      if (record.assignmentKey) sourceStat.nurseKeys.add(record.assignmentKey);
+    }
+  });
+
+  return Array.from(stationMap.values())
+    .filter((stat) => stat.incomingCount || stat.outgoingCount)
+    .map((stat) => ({
+      stationCode: stat.stationCode,
+      stationName: stat.stationName,
+      incomingCount: stat.incomingCount,
+      outgoingCount: stat.outgoingCount,
+      totalCount: stat.incomingCount + stat.outgoingCount,
+      incomingDays: stat.incomingDays,
+      outgoingDays: stat.outgoingDays,
+      incomingHours: Math.round(stat.incomingHours * 100) / 100,
+      outgoingHours: Math.round(stat.outgoingHours * 100) / 100,
+      nurseCount: stat.nurseKeys.size
+    }))
+    .sort((a, b) => {
+      const countCompare = Number(b.totalCount || 0) - Number(a.totalCount || 0);
+      if (countCompare !== 0) return countCompare;
+      return String(a.stationName || a.stationCode).localeCompare(String(b.stationName || b.stationCode), 'zh-Hant');
+    });
+}
+
+function createFairnessStationStat_(stationCode, stationName) {
+  return {
+    stationCode,
+    stationName,
+    incomingCount: 0,
+    outgoingCount: 0,
+    incomingDays: 0,
+    outgoingDays: 0,
+    incomingHours: 0,
+    outgoingHours: 0,
+    nurseKeys: new Set()
+  };
+}
+
+function getFairnessStationStat_(stationMap, stationCode, stationName) {
+  if (!stationMap.has(stationCode)) {
+    stationMap.set(stationCode, createFairnessStationStat_(stationCode, stationName || stationCode));
+  }
+  return stationMap.get(stationCode);
+}
+
+function buildFairnessNurseStats_(records) {
+  const nurseMap = new Map();
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const key = record.assignmentKey || record.nurseEmail || record.nurseName;
+    if (!key) return;
+    if (!nurseMap.has(key)) {
+      nurseMap.set(key, {
+        assignmentKey: record.assignmentKey || '',
+        nurseName: record.nurseName || record.nurseEmail || '',
+        nurseEmail: record.nurseEmail || '',
+        originalStationCode: record.originalStationCode || '',
+        originalStationName: record.originalStationName || '',
+        dispatchCount: 0,
+        dispatchDays: 0,
+        dispatchHours: 0,
+        targetStationNames: new Set(),
+        latestEndDate: ''
+      });
+    }
+    const stat = nurseMap.get(key);
+    stat.dispatchCount += 1;
+    stat.dispatchDays += getDispatchDays_(record);
+    stat.dispatchHours += getDispatchTotalHours_(record);
+    if (record.stationName || record.stationCode) stat.targetStationNames.add(record.stationName || record.stationCode);
+    if (!stat.latestEndDate || String(record.endDate || '') > stat.latestEndDate) {
+      stat.latestEndDate = String(record.endDate || '');
+    }
+  });
+
+  return Array.from(nurseMap.values())
+    .map((stat) => ({
+      assignmentKey: stat.assignmentKey,
+      nurseName: stat.nurseName,
+      nurseEmail: stat.nurseEmail,
+      originalStationCode: stat.originalStationCode,
+      originalStationName: stat.originalStationName,
+      dispatchCount: stat.dispatchCount,
+      dispatchDays: stat.dispatchDays,
+      dispatchHours: Math.round(stat.dispatchHours * 100) / 100,
+      targetStationSummary: Array.from(stat.targetStationNames).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hant')).join('、'),
+      latestEndDate: stat.latestEndDate,
+      nextAllowedDate: stat.latestEndDate ? addDays_(stat.latestEndDate, APP_CONFIG.temporaryDispatchCooldownDays) : ''
+    }))
+    .sort((a, b) => {
+      const countCompare = Number(b.dispatchCount || 0) - Number(a.dispatchCount || 0);
+      if (countCompare !== 0) return countCompare;
+      return String(a.nurseName || a.nurseEmail).localeCompare(String(b.nurseName || b.nurseEmail), 'zh-Hant');
+    });
+}
+
+function isTemporaryDispatchRecord_(record) {
+  const originalCode = normalizeOrgCode_(record && record.originalStationCode);
+  const stationCode = normalizeOrgCode_(record && record.stationCode);
+  return Boolean(originalCode && stationCode && originalCode !== stationCode);
+}
+
+function hasTemporaryDispatchCooldownGap_(existing, target) {
+  if (!existing || !target) return true;
+  const cooldownDays = Number(APP_CONFIG.temporaryDispatchCooldownDays || 0);
+  if (!cooldownDays) return true;
+  if (dateRangesOverlap_(existing.startDate, existing.endDate, target.startDate, target.endDate)) return false;
+
+  if (existing.endDate < target.startDate) {
+    return target.startDate >= addDays_(existing.endDate, cooldownDays);
+  }
+
+  if (target.endDate < existing.startDate) {
+    return existing.startDate >= addDays_(target.endDate, cooldownDays);
+  }
+
+  return true;
+}
+
+function getNextTemporaryDispatchAllowedDate_(existing, target) {
+  if (!existing || !target) return '';
+  if (existing.endDate <= target.startDate) {
+    return addDays_(existing.endDate, APP_CONFIG.temporaryDispatchCooldownDays);
+  }
+  if (target.endDate < existing.startDate) {
+    return addDays_(target.endDate, APP_CONFIG.temporaryDispatchCooldownDays);
+  }
+  return addDays_(existing.endDate, APP_CONFIG.temporaryDispatchCooldownDays);
+}
+
+function compareTemporaryDispatchCooldownConflicts_(target) {
+  return (a, b) => {
+    const distanceA = getDateRangeDistanceDays_(a, target);
+    const distanceB = getDateRangeDistanceDays_(b, target);
+    if (distanceA !== distanceB) return distanceA - distanceB;
+    return compareDispatchRecords_(a, b);
+  };
+}
+
+function getDateRangeDistanceDays_(left, right) {
+  if (dateRangesOverlap_(left.startDate, left.endDate, right.startDate, right.endDate)) return 0;
+  if (left.endDate < right.startDate) return getDateDifferenceDays_(left.endDate, right.startDate);
+  if (right.endDate < left.startDate) return getDateDifferenceDays_(right.endDate, left.startDate);
+  return 0;
+}
+
+function getDateDifferenceDays_(fromDate, toDate) {
+  const from = new Date(`${fromDate}T00:00:00+08:00`);
+  const to = new Date(`${toDate}T00:00:00+08:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  return Math.abs(Math.round((to.getTime() - from.getTime()) / 86400000));
+}
+
 function dateRangesOverlap_(leftStart, leftEnd, rightStart, rightEnd) {
   const normalizedLeftStart = String(leftStart || '').trim();
   const normalizedLeftEnd = String(leftEnd || leftStart || '').trim();
@@ -1568,6 +1827,14 @@ function normalizeDate_(value, label) {
     throw new Error(`${label}格式錯誤。`);
   }
   return raw;
+}
+
+function normalizeYear_(value) {
+  const year = Number(value || new Date().getFullYear());
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    throw new Error('統計年度格式錯誤。');
+  }
+  return year;
 }
 
 function normalizeTime_(value) {
