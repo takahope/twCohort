@@ -163,6 +163,114 @@
       white-space: nowrap;
     }
 
+    .import-panel .panel-body {
+      display: grid;
+      gap: 14px;
+    }
+
+    .import-grid {
+      display: grid;
+      grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .import-options {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      padding: 10px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .import-options input {
+      width: auto;
+      margin-top: 3px;
+      box-shadow: none;
+    }
+
+    .import-options span {
+      display: grid;
+      gap: 2px;
+    }
+
+    .import-textarea {
+      min-height: 150px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      line-height: 1.45;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    .import-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .import-summary-item {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 10px 12px;
+      display: grid;
+      gap: 3px;
+    }
+
+    .import-summary-item strong {
+      color: var(--primary-strong);
+      font-size: 1.2rem;
+      line-height: 1;
+    }
+
+    .import-preview-wrap {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: auto;
+      max-height: 360px;
+      background: #fff;
+    }
+
+    .import-preview-table {
+      min-width: 940px;
+      table-layout: auto;
+    }
+
+    .import-preview-table th,
+    .import-preview-table td {
+      white-space: normal;
+      vertical-align: top;
+    }
+
+    .import-status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-weight: 900;
+      font-size: .82rem;
+    }
+
+    .import-status-pill.ready {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .import-status-pill.skip {
+      background: #e0f2fe;
+      color: #075985;
+    }
+
+    .import-status-pill.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
     .fairness-summary {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1375,6 +1483,8 @@
       .records-query,
       .fairness-summary,
       .fairness-grid,
+      .import-grid,
+      .import-summary,
       .layout,
       .schedule-layout {
         grid-template-columns: 1fr;
@@ -1385,6 +1495,7 @@
       .topbar,
       .toolbar,
       .records-query,
+      .import-panel .panel-body,
       .layout {
         padding-left: 14px;
         padding-right: 14px;
@@ -1412,6 +1523,7 @@
       .bottom-toolbar,
       .toolbar,
       .records-query,
+      .import-panel,
       .layout > .panel:first-child,
       .schedule-toolbar,
       .schedule-controls {
@@ -1564,6 +1676,58 @@
       </section>
 
       <div class="content-stack">
+        <section class="panel import-panel hidden" id="import-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">正式資料匯入</div>
+              <div class="muted">從 Excel 或 Google Sheet 複製表格貼上；正式寫入只限自己管理的調派駐站。</div>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="import-grid">
+              <div class="field">
+                <label for="import-year">匯入年度</label>
+                <input id="import-year" type="number" min="2020" max="2100" step="1">
+              </div>
+              <label class="import-options" for="import-historical-mode">
+                <input id="import-historical-mode" type="checkbox" checked>
+                <span>
+                  <strong>今年既有正式資料</strong>
+                  <small class="muted">30 天間隔列為警示，不阻擋匯入；未來手動新增仍會阻擋。</small>
+                </span>
+              </label>
+              <div class="records-actions">
+                <button class="btn btn-primary" type="button" id="import-preview-btn">預覽匯入</button>
+                <button class="btn btn-ghost" type="button" id="import-commit-btn" disabled>確認匯入</button>
+                <button class="btn btn-ghost" type="button" id="import-clear-btn">清空</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="import-text">貼上表格</label>
+              <textarea id="import-text" class="import-textarea" placeholder="必要欄位：期間或調派起日、調派駐站、護理師。建議欄位：來源駐站、護理師信箱、班別、備註。&#10;範例：期間	調派駐站	來源駐站	護理師	護理師信箱	班別	備註&#10;6/3-6/5	新竹台大	汀州(有訪員時)	高翠嬌	uoh212@as.edu.tw	正常班	今年正式資料"></textarea>
+            </div>
+            <div class="status" id="import-status"></div>
+            <div class="import-summary hidden" id="import-summary"></div>
+            <div class="import-preview-wrap hidden" id="import-preview-wrap">
+              <table class="import-preview-table">
+                <thead>
+                  <tr>
+                    <th>列</th>
+                    <th>狀態</th>
+                    <th>期間</th>
+                    <th>調派駐站</th>
+                    <th>來源駐站</th>
+                    <th>護理師</th>
+                    <th>班別</th>
+                    <th>訊息</th>
+                  </tr>
+                </thead>
+                <tbody id="import-preview-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="panel-header">
             <div>
@@ -1806,6 +1970,9 @@
       isLoadingData: false,
       dataRequestId: 0,
       fairnessRequestId: 0,
+      importPreview: null,
+      isPreviewingImport: false,
+      isCommittingImport: false,
       fairness: {
         year: new Date().getFullYear(),
         dateFrom: '',
@@ -1873,6 +2040,7 @@
       el.scheduleYear.value = year;
       el.scheduleDate.value = today;
       el.fairnessYear.value = year;
+      el.importYear.value = year;
       updateFairnessRange();
       renderFairnessStats();
       updateScheduleControls();
@@ -1910,6 +2078,17 @@
         'fairness-nurse-count',
         'fairness-station-body',
         'fairness-nurse-body',
+        'import-panel',
+        'import-year',
+        'import-historical-mode',
+        'import-text',
+        'import-preview-btn',
+        'import-commit-btn',
+        'import-clear-btn',
+        'import-status',
+        'import-summary',
+        'import-preview-wrap',
+        'import-preview-body',
         'reload-btn',
         'export-records-btn',
         'records-status',
@@ -1983,6 +2162,12 @@
       el.deleteStationBtn.addEventListener('click', deleteSelectedStation);
       el.reloadBtn.addEventListener('click', () => loadData(collectFilters()));
       el.exportRecordsBtn.addEventListener('click', exportRecordsToExcel);
+      el.importPreviewBtn.addEventListener('click', previewDispatchImport);
+      el.importCommitBtn.addEventListener('click', commitDispatchImport);
+      el.importClearBtn.addEventListener('click', clearDispatchImport);
+      el.importText.addEventListener('input', markImportPreviewDirty);
+      el.importYear.addEventListener('input', markImportPreviewDirty);
+      el.importHistoricalMode.addEventListener('change', markImportPreviewDirty);
       el.fairnessLoadBtn.addEventListener('click', () => loadFairnessStats({ reason: 'manual' }));
       el.fairnessYear.addEventListener('input', () => {
         const rawYear = Number(el.fairnessYear.value);
@@ -2189,6 +2374,7 @@
       el.viewerEmail.textContent = [state.viewer.email || '', state.testMode ? '測試模式' : ''].filter(Boolean).join('｜');
       notifyLoginComplete();
       renderTestModeControl();
+      renderImportPanel();
 
       el.filterDateFrom.value = state.filters.dateFrom || '';
       el.filterDateTo.value = state.filters.dateTo || '';
@@ -2401,6 +2587,216 @@
       el.testModeBtn.classList.remove('hidden');
       el.testModeBtn.classList.toggle('is-active', state.testMode);
       el.testModeBtn.textContent = state.testMode ? '關閉測試模式' : '啟用測試模式';
+    }
+
+    function renderImportPanel() {
+      const canImport = Boolean(state.viewer && state.viewer.canImportDispatchRecords);
+      if (!el.importPanel) return;
+      el.importPanel.classList.toggle('hidden', !canImport);
+      if (canImport && !el.importYear.value) {
+        el.importYear.value = new Date().getFullYear();
+      }
+      updateImportButtons();
+    }
+
+    function collectDispatchImportPayload() {
+      const filters = {
+        ...collectFilters(),
+        testMode: false
+      };
+      return {
+        year: normalizeYear(el.importYear && el.importYear.value),
+        historicalMode: Boolean(el.importHistoricalMode && el.importHistoricalMode.checked),
+        text: el.importText ? el.importText.value : '',
+        filters
+      };
+    }
+
+    async function previewDispatchImport() {
+      if (state.isPreviewingImport || state.isCommittingImport) return;
+      const canImport = Boolean(state.viewer && state.viewer.canImportDispatchRecords);
+      if (!canImport) {
+        setImportStatus('目前登入帳號沒有正式匯入權限。', 'error');
+        return;
+      }
+      const payload = collectDispatchImportPayload();
+      if (!payload.text.trim()) {
+        setImportStatus('請先貼上要匯入的表格資料。', 'error');
+        return;
+      }
+
+      state.isPreviewingImport = true;
+      state.importPreview = null;
+      updateImportButtons();
+      renderImportPreview();
+      setImportStatus('正在預覽匯入資料...');
+      try {
+        const response = await callServer('previewWorkHourDispatchImport', payload);
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '預覽失敗。');
+        }
+        state.importPreview = response;
+        renderImportPreview();
+        const summary = response.summary || {};
+        const statusType = summary.errorCount ? 'error' : 'success';
+        setImportStatus(`預覽完成：可匯入 ${formatNumber(summary.readyCount)} 筆、略過 ${formatNumber(summary.skippedCount)} 筆、錯誤 ${formatNumber(summary.errorCount)} 筆。`, statusType);
+      } catch (error) {
+        state.importPreview = null;
+        renderImportPreview();
+        setImportStatus(error && error.message ? error.message : '預覽失敗。', 'error');
+      } finally {
+        state.isPreviewingImport = false;
+        updateImportButtons();
+      }
+    }
+
+    async function commitDispatchImport() {
+      if (state.isPreviewingImport || state.isCommittingImport) return;
+      const preview = state.importPreview || {};
+      const summary = preview.summary || {};
+      if (!summary.readyCount || summary.errorCount) {
+        setImportStatus('請先完成預覽，且沒有錯誤後再確認匯入。', 'error');
+        return;
+      }
+      const confirmed = window.confirm(`確定正式匯入 ${formatNumber(summary.readyCount)} 筆調派紀錄？匯入後會立即寫入正式資料。`);
+      if (!confirmed) {
+        setImportStatus('已取消正式匯入，未寫入任何資料。', 'success');
+        setRecordsStatus('已取消正式匯入：月曆與年度紀錄未變更。', 'success');
+        return;
+      }
+
+      state.isCommittingImport = true;
+      updateImportButtons();
+      setImportStatus('正式匯入中，完成後會刷新月曆與年度統計...');
+      setRecordsStatus('正式資料匯入中，完成後會刷新月曆與年度紀錄...');
+      try {
+        const response = await callServer('commitWorkHourDispatchImport', collectDispatchImportPayload());
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '正式匯入失敗。');
+        }
+        const importSummary = response.importSummary || {};
+        const createdCount = Number(importSummary.createdCount || importSummary.readyCount || 0);
+        const successMessage = `正式資料已匯入 ${formatNumber(createdCount)} 筆。`;
+        applyData(response, {
+          reason: 'import-dispatch',
+          skipFairnessAutoLoad: true
+        });
+        state.importPreview = null;
+        renderImportPreview();
+        setImportStatus(successMessage, 'success');
+        await refreshViewsAfterMutation(successMessage, {
+          reason: 'import-dispatch'
+        });
+      } catch (error) {
+        const message = error && error.message ? error.message : '正式匯入失敗。';
+        setImportStatus(message, 'error');
+        setRecordsStatus(`正式匯入失敗：${message} 月曆與紀錄未變更。`, 'error');
+      } finally {
+        state.isCommittingImport = false;
+        updateImportButtons();
+      }
+    }
+
+    function clearDispatchImport() {
+      if (state.isPreviewingImport || state.isCommittingImport) return;
+      if (el.importText) el.importText.value = '';
+      state.importPreview = null;
+      renderImportPreview();
+      setImportStatus('已清空匯入資料，尚未寫入任何紀錄。', 'success');
+    }
+
+    function markImportPreviewDirty() {
+      if (!state.importPreview) {
+        updateImportButtons();
+        return;
+      }
+      state.importPreview = null;
+      renderImportPreview();
+      setImportStatus('匯入內容已變更，請重新預覽。');
+    }
+
+    function renderImportPreview() {
+      const preview = state.importPreview;
+      const rows = preview && Array.isArray(preview.rows) ? preview.rows : [];
+      if (!rows.length) {
+        el.importSummary.classList.add('hidden');
+        el.importSummary.innerHTML = '';
+        el.importPreviewWrap.classList.add('hidden');
+        el.importPreviewBody.innerHTML = '';
+        updateImportButtons();
+        return;
+      }
+
+      const summary = preview.summary || {};
+      el.importSummary.classList.remove('hidden');
+      el.importSummary.innerHTML = [
+        buildImportSummaryItemHtml('可匯入', summary.readyCount || 0),
+        buildImportSummaryItemHtml('略過', summary.skippedCount || 0),
+        buildImportSummaryItemHtml('錯誤', summary.errorCount || 0),
+        buildImportSummaryItemHtml('警示', summary.warningCount || 0)
+      ].join('');
+      el.importPreviewWrap.classList.remove('hidden');
+      el.importPreviewBody.innerHTML = rows.map(buildImportPreviewRowHtml).join('');
+      updateImportButtons();
+    }
+
+    function buildImportSummaryItemHtml(label, value) {
+      return `
+        <div class="import-summary-item">
+          <span class="cell-sub">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(formatNumber(value))}</strong>
+        </div>
+      `;
+    }
+
+    function buildImportPreviewRowHtml(row) {
+      const status = row.status || 'error';
+      const statusLabel = status === 'ready' ? '可匯入' : (status === 'skip' ? '略過' : '錯誤');
+      const messages = [
+        row.message || '',
+        ...(Array.isArray(row.warnings) ? row.warnings : [])
+      ].filter(Boolean).join('\n');
+      const dateText = row.startDate
+        ? formatDateRange(row.startDate, row.endDate || row.startDate)
+        : '-';
+      const nurseText = [row.nurseName || '', row.nurseEmail || ''].filter(Boolean).join('｜') || '-';
+      return `
+        <tr>
+          <td>${escapeHtml(row.rowNumber || '')}</td>
+          <td><span class="import-status-pill ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span></td>
+          <td>${escapeHtml(dateText)}</td>
+          <td>${escapeHtml(row.stationName || '-')}</td>
+          <td>${escapeHtml(row.originalStationName || '-')}</td>
+          <td>${escapeHtml(nurseText)}</td>
+          <td>${escapeHtml(row.shiftName || '-')}</td>
+          <td><div class="cell-sub">${escapeHtml(messages || '-')}</div></td>
+        </tr>
+      `;
+    }
+
+    function updateImportButtons() {
+      if (!el.importPreviewBtn || !el.importCommitBtn) return;
+      const canImport = Boolean(state.viewer && state.viewer.canImportDispatchRecords);
+      const hasText = Boolean(el.importText && el.importText.value.trim());
+      const summary = state.importPreview && state.importPreview.summary ? state.importPreview.summary : {};
+      const canCommit = canImport
+        && !state.isPreviewingImport
+        && !state.isCommittingImport
+        && Number(summary.readyCount || 0) > 0
+        && Number(summary.errorCount || 0) === 0;
+      el.importPreviewBtn.disabled = !canImport || !hasText || state.isPreviewingImport || state.isCommittingImport;
+      el.importPreviewBtn.textContent = state.isPreviewingImport ? '預覽中' : '預覽匯入';
+      el.importCommitBtn.disabled = !canCommit;
+      el.importCommitBtn.textContent = state.isCommittingImport ? '匯入中' : '確認匯入';
+      if (el.importClearBtn) {
+        el.importClearBtn.disabled = state.isPreviewingImport || state.isCommittingImport;
+      }
+    }
+
+    function setImportStatus(message, type) {
+      if (!el.importStatus) return;
+      el.importStatus.textContent = message || '';
+      el.importStatus.className = `status${type ? ` ${type}` : ''}`;
     }
 
     async function toggleTestMode() {
@@ -4610,9 +5006,6 @@
           setDispatchActionError(`${modeLabel}僅可安排週日到週四，請移除週五或週六日期：${blockedDates.join('、')}`, '調派未建立');
           return;
         }
-      } else if (!state.testMode && selectedNurses.some((item) => !isManagedSourceNurse(item))) {
-        setDispatchActionError('正常班只能調派自己管理範圍內的護理師。', '調派未建立');
-        return;
       }
 
       const payload = {
@@ -5258,6 +5651,12 @@
       el.reloadBtn.textContent = isLoading ? '查詢中' : '查詢';
       if (el.fairnessLoadBtn) el.fairnessLoadBtn.disabled = isLoading || state.fairness.isLoading;
       if (el.exportRecordsBtn) el.exportRecordsBtn.disabled = isLoading || state.fairness.isLoading || !state.fairness.ready;
+      if (isLoading) {
+        if (el.importPreviewBtn) el.importPreviewBtn.disabled = true;
+        if (el.importCommitBtn) el.importCommitBtn.disabled = true;
+      } else {
+        updateImportButtons();
+      }
       if (el.testModeBtn && !el.testModeBtn.classList.contains('hidden')) {
         el.testModeBtn.disabled = isLoading;
       }

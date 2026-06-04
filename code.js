@@ -18,6 +18,7 @@ const APP_CONFIG = {
   defaultRangeDays: 31,
   temporaryDispatchCooldownDays: 30,
   maxHoursPerRecord: 24,
+  maxImportRows: 300,
   fullShiftBreakHours: 1,
   fullShiftBreakThresholdHours: 8,
   unavailableStatusKeywords: ['育嬰', '留停', '留職停薪', '停薪', '留職', '停職', '休職'],
@@ -39,6 +40,23 @@ const FIELD_ALIASES = {
   alias: ['簡稱', '別名', 'alias'],
   parentCode: ['上層代碼', '母層代碼', 'parentCode'],
   iso: ['驗證範圍', 'ISO', 'iso']
+};
+
+const DISPATCH_IMPORT_FIELD_ALIASES = {
+  dateRange: ['期間', '日期區間', '調派期間', '調派日期', 'dateRange'],
+  startDate: ['調派起日', '起日', '開始日期', '日期', 'workDate', 'startDate'],
+  endDate: ['調派迄日', '迄日', '結束日期', 'endDate'],
+  station: ['調派駐站', '目標駐站', '駐站', '至', '至駐站', 'station', 'stationName'],
+  stationCode: ['調派駐站代碼', '目標駐站代碼', '駐站代碼', 'stationCode'],
+  sourceStation: ['來源駐站', '原駐站', '原', 'from', 'originalStation', 'originalStationName'],
+  sourceStationCode: ['來源駐站代碼', '原駐站代碼', 'originalStationCode'],
+  assignmentKey: ['護理師配置鍵', 'assignmentKey'],
+  nurseName: ['護理師', '人員', '姓名', '護理師姓名', 'nurseName'],
+  nurseEmail: ['護理師信箱', '信箱', '電子信箱', '電子郵件', 'nurseEmail', 'email'],
+  shiftName: ['班別', '模式', 'shiftName'],
+  hours: ['時數', '工時', 'hours'],
+  note: ['備註', 'note'],
+  temporaryInfo: ['臨時調配', '臨調', 'temporaryDispatch']
 };
 
 function doGet() {
@@ -387,6 +405,527 @@ function deleteWorkHourDispatch(payload) {
   } finally {
     if (hasLock) lock.releaseLock();
   }
+}
+
+function previewWorkHourDispatchImport(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    if (!viewerEmail) {
+      throw new Error('無法辨識目前登入帳號。');
+    }
+
+    const source = loadDispatchSource_({ forceFresh: true });
+    const context = buildDispatchContext_(source, viewerEmail, { testMode: false });
+    assertCanImportDispatchRecords_(context);
+    const records = getStoredDispatchRecords_();
+    const plan = buildWorkHourDispatchImportPlan_(payload, source, context, records, viewerEmail);
+    return {
+      success: true,
+      ...serializeWorkHourDispatchImportPlan_(plan)
+    };
+  } catch (error) {
+    console.error('預覽正式調派匯入失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法預覽正式調派匯入。'
+    };
+  }
+}
+
+function commitWorkHourDispatchImport(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  const lock = LockService.getScriptLock();
+  let hasLock = false;
+
+  try {
+    if (!viewerEmail) {
+      throw new Error('無法辨識目前登入帳號。');
+    }
+
+    acquireDispatchWriteLock_(lock);
+    hasLock = true;
+
+    const source = loadDispatchSource_({ includeSheets: true, forceFresh: true });
+    const context = buildDispatchContext_(source, viewerEmail, { testMode: false });
+    assertCanImportDispatchRecords_(context);
+    const records = getStoredDispatchRecords_();
+    const plan = buildWorkHourDispatchImportPlan_(payload, source, context, records, viewerEmail);
+    if (plan.summary.errorCount > 0) {
+      throw new Error(`匯入資料仍有 ${plan.summary.errorCount} 筆錯誤，請先修正後重新預覽。`);
+    }
+    if (!plan.pendingRecords.length) {
+      throw new Error('沒有可正式匯入的新調派紀錄。');
+    }
+
+    const now = formatTimestamp_(new Date());
+    const importedRecords = plan.pendingRecords.map((record) => ({
+      ...record,
+      id: Utilities.getUuid(),
+      version: createDispatchRecordVersion_(),
+      createdAt: now,
+      createdBy: viewerEmail,
+      updatedAt: now,
+      updatedBy: viewerEmail,
+      status: '有效'
+    }));
+    records.unshift(...importedRecords);
+    saveStoredDispatchRecords_(records);
+    syncTemporaryDispatchColumn_(source, records, importedRecords.map((record) => record.assignmentKey));
+    lock.releaseLock();
+    hasLock = false;
+
+    const response = getDispatchAppData({
+      ...(payload && payload.filters ? payload.filters : {}),
+      testMode: false
+    });
+    response.importSummary = {
+      ...plan.summary,
+      createdCount: importedRecords.length
+    };
+    return response;
+  } catch (error) {
+    console.error('正式匯入調派資料失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法正式匯入調派資料。'
+    };
+  } finally {
+    if (hasLock) lock.releaseLock();
+  }
+}
+
+function buildWorkHourDispatchImportPlan_(payload, source, context, existingRecords, viewerEmail) {
+  const importPayload = normalizeDispatchImportPayload_(payload);
+  const parsed = parseDispatchImportText_(importPayload.text);
+  const results = [];
+  const pendingRecords = [];
+
+  parsed.rows.forEach((rawRow) => {
+    try {
+      const normalized = normalizeDispatchImportRow_(rawRow, parsed.columnMap, importPayload, source, context, viewerEmail);
+      const validationRecord = {
+        ...normalized,
+        id: `IMPORT-${rawRow.rowNumber}`,
+        version: 'IMPORT',
+        status: '有效'
+      };
+      const duplicate = findExactDuplicateDispatch_(validationRecord, existingRecords.concat(pendingRecords));
+      if (duplicate) {
+        results.push(buildDispatchImportRowResult_('skip', rawRow.rowNumber, normalized, [
+          duplicate.id && String(duplicate.id).indexOf('IMPORT-') === 0
+            ? '與本次匯入其他列重複，正式匯入時會略過。'
+            : '系統已有相同調派紀錄，正式匯入時會略過。'
+        ]));
+        return;
+      }
+
+      assertNoOverlappingNurseDispatch_(validationRecord, existingRecords.concat(pendingRecords));
+      const warnings = [];
+      try {
+        assertTemporaryDispatchCooldown_(validationRecord, existingRecords.concat(pendingRecords));
+      } catch (error) {
+        if (!importPayload.historicalMode) throw error;
+        warnings.push(error && error.message ? error.message : '臨時調派間隔未滿 30 天。');
+      }
+
+      pendingRecords.push(validationRecord);
+      results.push(buildDispatchImportRowResult_('ready', rawRow.rowNumber, normalized, warnings));
+    } catch (error) {
+      results.push({
+        rowNumber: rawRow.rowNumber,
+        status: 'error',
+        message: error && error.message ? error.message : '此列資料無法匯入。',
+        warnings: [],
+        startDate: '',
+        endDate: '',
+        stationName: '',
+        originalStationName: '',
+        nurseName: '',
+        nurseEmail: '',
+        shiftName: '',
+        dispatchDays: 0
+      });
+    }
+  });
+
+  return {
+    rows: results,
+    pendingRecords,
+    summary: summarizeDispatchImportRows_(results)
+  };
+}
+
+function normalizeDispatchImportPayload_(payload) {
+  const text = String(payload && payload.text || '').trim();
+  if (!text) {
+    throw new Error('請貼上要匯入的 Excel 或 Google Sheet 表格資料。');
+  }
+  const year = normalizeYear_(payload && payload.year);
+  return {
+    text,
+    year,
+    historicalMode: !(payload && payload.historicalMode === false)
+  };
+}
+
+function parseDispatchImportText_(text) {
+  const lines = String(text || '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim());
+  if (lines.length < 2) {
+    throw new Error('匯入資料至少需要標題列與一筆資料。');
+  }
+  if (lines.length - 1 > APP_CONFIG.maxImportRows) {
+    throw new Error(`單次最多匯入 ${APP_CONFIG.maxImportRows} 筆資料，請分批匯入。`);
+  }
+
+  const delimiter = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+  const headers = parseDelimitedLine_(lines[0], delimiter);
+  const columnMap = buildDispatchImportColumnMap_(headers);
+  validateDispatchImportColumnMap_(columnMap);
+
+  const rows = lines.slice(1).map((line, index) => ({
+    rowNumber: index + 2,
+    values: parseDelimitedLine_(line, delimiter)
+  })).filter((row) => row.values.some((value) => String(value || '').trim()));
+  if (!rows.length) {
+    throw new Error('匯入資料沒有可處理的內容列。');
+  }
+
+  return {
+    columnMap,
+    rows
+  };
+}
+
+function parseDelimitedLine_(line, delimiter) {
+  if (delimiter === '\t') return String(line || '').split('\t');
+  const values = [];
+  let value = '';
+  let inQuotes = false;
+  const raw = String(line || '');
+  for (let i = 0; i < raw.length; i += 1) {
+    const char = raw[i];
+    if (char === '"') {
+      if (inQuotes && raw[i + 1] === '"') {
+        value += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      values.push(value);
+      value = '';
+    } else {
+      value += char;
+    }
+  }
+  values.push(value);
+  return values;
+}
+
+function buildDispatchImportColumnMap_(headers) {
+  return Object.keys(DISPATCH_IMPORT_FIELD_ALIASES).reduce((map, key) => {
+    map[key] = findImportHeaderIndex_(headers, DISPATCH_IMPORT_FIELD_ALIASES[key]);
+    return map;
+  }, {});
+}
+
+function validateDispatchImportColumnMap_(columnMap) {
+  const hasDate = columnMap.dateRange >= 0 || columnMap.startDate >= 0;
+  const hasStation = columnMap.station >= 0 || columnMap.stationCode >= 0;
+  const hasNurse = columnMap.assignmentKey >= 0 || columnMap.nurseEmail >= 0 || columnMap.nurseName >= 0;
+  if (!hasDate || !hasStation || !hasNurse) {
+    throw new Error('匯入表格缺少必要欄位：期間或調派起日、調派駐站、護理師。');
+  }
+}
+
+function findImportHeaderIndex_(headers, aliases) {
+  const normalizedHeaders = (Array.isArray(headers) ? headers : []).map(normalizeImportLookupText_);
+  for (let i = 0; i < aliases.length; i += 1) {
+    const index = normalizedHeaders.indexOf(normalizeImportLookupText_(aliases[i]));
+    if (index >= 0) return index;
+  }
+  return -1;
+}
+
+function normalizeDispatchImportRow_(row, columnMap, importPayload, source, context, viewerEmail) {
+  const dateRange = normalizeDispatchImportDateRange_(
+    getDispatchImportCell_(row, columnMap.dateRange),
+    getDispatchImportCell_(row, columnMap.startDate),
+    getDispatchImportCell_(row, columnMap.endDate),
+    importPayload.year
+  );
+  const targetStation = findDispatchImportStation_(
+    source,
+    getDispatchImportCell_(row, columnMap.stationCode),
+    getDispatchImportCell_(row, columnMap.station),
+    '調派駐站'
+  );
+  assertCanManageStation_(context, targetStation.code);
+
+  const temporaryInfo = getDispatchImportCell_(row, columnMap.temporaryInfo);
+  const sourceStationText = getDispatchImportCell_(row, columnMap.sourceStation)
+    || extractOriginalStationFromTemporaryInfo_(temporaryInfo);
+  const sourceStation = findDispatchImportStation_(
+    source,
+    getDispatchImportCell_(row, columnMap.sourceStationCode),
+    sourceStationText,
+    '來源駐站',
+    true
+  );
+  const assignment = findDispatchImportAssignment_(source, {
+    assignmentKey: getDispatchImportCell_(row, columnMap.assignmentKey),
+    nurseEmail: getDispatchImportCell_(row, columnMap.nurseEmail),
+    nurseName: getDispatchImportCell_(row, columnMap.nurseName),
+    sourceStationCode: sourceStation && sourceStation.code
+  });
+  const shiftName = normalizeDispatchMode_(getDispatchImportCell_(row, columnMap.shiftName) || APP_CONFIG.shiftOptions[0]);
+  const hours = getDispatchImportCell_(row, columnMap.hours) || 8;
+
+  return normalizeWorkHourPayload_({
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    workDate: dateRange.startDate,
+    stationCode: targetStation.code,
+    assignmentKey: assignment.assignmentKey,
+    shiftName,
+    startTime: '',
+    endTime: '',
+    hours,
+    note: getDispatchImportCell_(row, columnMap.note)
+  }, context, viewerEmail);
+}
+
+function getDispatchImportCell_(row, index) {
+  if (!row || index < 0) return '';
+  return String(row.values[index] || '').trim();
+}
+
+function normalizeDispatchImportDateRange_(rangeText, startText, endText, year) {
+  if (startText) {
+    const startDate = normalizeDispatchImportDate_(startText, year, '調派起日');
+    const endDate = endText
+      ? normalizeDispatchImportDate_(endText, year, '調派迄日', Number(startDate.slice(5, 7)))
+      : startDate;
+    if (endDate < startDate) throw new Error('調派迄日不可早於調派起日。');
+    return { startDate, endDate };
+  }
+
+  const rawRange = String(rangeText || '').trim();
+  if (!rawRange) throw new Error('缺少調派日期。');
+  const parts = splitDispatchImportDateRange_(rawRange);
+  const startDate = normalizeDispatchImportDate_(parts[0], year, '調派起日');
+  const endDate = parts[1]
+    ? normalizeDispatchImportDate_(parts[1], year, '調派迄日', Number(startDate.slice(5, 7)))
+    : startDate;
+  if (endDate < startDate) throw new Error('調派迄日不可早於調派起日。');
+  return { startDate, endDate };
+}
+
+function splitDispatchImportDateRange_(value) {
+  const raw = String(value || '').replace(/\s+/g, ' ').trim();
+  const explicitSeparator = raw.split(/\s*(?:至|到|~|～|－|–|—)\s*/);
+  if (explicitSeparator.length >= 2) return [explicitSeparator[0], explicitSeparator.slice(1).join('')];
+  const spacedHyphen = raw.split(/\s+-\s+/);
+  if (spacedHyphen.length >= 2) return [spacedHyphen[0], spacedHyphen.slice(1).join('')];
+  const compactFullSlashRange = raw.match(/^(\d{4}\/\d{1,2}\/\d{1,2})\s*-\s*(\d{4}\/\d{1,2}\/\d{1,2})$/);
+  if (compactFullSlashRange) return [compactFullSlashRange[1], compactFullSlashRange[2]];
+  const compactMonthRange = raw.match(/^(\d{1,2}\/\d{1,2})\s*-\s*((?:\d{1,2}\/)?\d{1,2})$/);
+  if (compactMonthRange) return [compactMonthRange[1], compactMonthRange[2]];
+  return [raw, ''];
+}
+
+function normalizeDispatchImportDate_(value, year, label, fallbackMonth) {
+  const raw = String(value || '')
+    .trim()
+    .replace(/[年月]/g, '/')
+    .replace(/[日號]/g, '')
+    .replace(/\./g, '/')
+    .replace(/\s+/g, '');
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(raw)) {
+    const parts = raw.split(/[-/]/).map(Number);
+    return normalizeDateParts_(parts[0], parts[1], parts[2], label);
+  }
+  if (/^\d{1,2}[-/]\d{1,2}$/.test(raw)) {
+    const parts = raw.split(/[-/]/).map(Number);
+    return normalizeDateParts_(year, parts[0], parts[1], label);
+  }
+  if (/^\d{1,2}$/.test(raw) && fallbackMonth) {
+    return normalizeDateParts_(year, fallbackMonth, Number(raw), label);
+  }
+  throw new Error(`${label}格式錯誤，請使用 2026/06/03、6/3 或 6/3-6/5。`);
+}
+
+function normalizeDateParts_(year, month, day, label) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error(`${label}格式錯誤。`);
+  }
+  const expected = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const date = new Date(`${expected}T00:00:00+08:00`);
+  const normalized = Number.isNaN(date.getTime())
+    ? ''
+    : Utilities.formatDate(date, 'Asia/Taipei', 'yyyy-MM-dd');
+  if (normalized !== expected) {
+    throw new Error(`${label}格式錯誤。`);
+  }
+  return normalized;
+}
+
+function findDispatchImportStation_(source, codeValue, nameValue, label, optional) {
+  const stations = Array.isArray(source && source.stations) ? source.stations : [];
+  const code = normalizeOrgCode_(codeValue);
+  if (code) {
+    const station = stations.find((item) => item.code === code);
+    if (station) return station;
+    throw new Error(`找不到${label}代碼：${code}`);
+  }
+
+  const lookup = normalizeImportLookupText_(nameValue);
+  if (!lookup) {
+    if (optional) return null;
+    throw new Error(`缺少${label}。`);
+  }
+  const baseLookup = normalizeImportLookupText_(String(nameValue || '').replace(/[（(].*?[）)]/g, ''));
+  const lookupValues = Array.from(new Set([lookup, baseLookup].filter(Boolean)));
+
+  const matches = stations.filter((station) => (
+    lookupValues.includes(normalizeImportLookupText_(station.name))
+    || lookupValues.includes(normalizeImportLookupText_(station.alias))
+    || lookupValues.includes(normalizeImportLookupText_(station.code))
+  ));
+  if (matches.length === 1) return matches[0];
+  if (!matches.length) {
+    const looseMatches = stations.filter((station) => {
+      const names = [station.name, station.alias, station.code]
+        .map(normalizeImportLookupText_)
+        .filter(Boolean);
+      return names.some((name) => lookupValues.some((value) => name.indexOf(value) >= 0 || value.indexOf(name) >= 0));
+    });
+    if (looseMatches.length === 1) return looseMatches[0];
+    if (looseMatches.length > 1) {
+      throw new Error(`${label}「${nameValue}」對應到多個駐站，請改填駐站代碼。`);
+    }
+    throw new Error(`找不到${label}：${nameValue}`);
+  }
+  throw new Error(`${label}「${nameValue}」對應到多個駐站，請改填駐站代碼。`);
+}
+
+function findDispatchImportAssignment_(source, options) {
+  const settings = options || {};
+  const assignments = (Array.isArray(source && source.assignments) ? source.assignments : [])
+    .filter(isNurseAssignment_);
+  const assignmentKey = String(settings.assignmentKey || '').trim();
+  if (assignmentKey) {
+    const assignment = assignments.find((item) => item.assignmentKey === assignmentKey);
+    if (assignment) return assignment;
+    throw new Error(`找不到護理師配置鍵：${assignmentKey}`);
+  }
+
+  const sourceStationCode = normalizeOrgCode_(settings.sourceStationCode);
+  const email = normalizeEmail_(settings.nurseEmail);
+  const nameLookup = normalizeImportLookupText_(settings.nurseName);
+  let matches = assignments;
+  if (sourceStationCode) matches = matches.filter((item) => item.orgCode === sourceStationCode);
+  if (email) matches = matches.filter((item) => normalizeEmail_(item.email) === email);
+  if (!email && nameLookup) matches = matches.filter((item) => normalizeImportLookupText_(item.name) === nameLookup);
+
+  if (!email && !nameLookup) {
+    throw new Error('缺少護理師姓名或信箱。');
+  }
+  if (matches.length === 1) return matches[0];
+  if (!matches.length) {
+    throw new Error(`找不到護理師：${settings.nurseName || settings.nurseEmail}`);
+  }
+  throw new Error(`護理師「${settings.nurseName || settings.nurseEmail}」對應到多筆配置，請補上護理師信箱或來源駐站。`);
+}
+
+function extractOriginalStationFromTemporaryInfo_(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const match = text.match(/原\s*[:：]\s*([^\n\r|]+)/);
+  return match ? String(match[1] || '').trim() : '';
+}
+
+function normalizeImportLookupText_(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[()\[\]{}（）【】［］「」『』]/g, '')
+    .replace(/\s+/g, '');
+}
+
+function findExactDuplicateDispatch_(target, records) {
+  return (Array.isArray(records) ? records : [])
+    .map(normalizeStoredDispatchRecord_)
+    .filter(Boolean)
+    .find((record) => (
+      record.status === '有效'
+      && record.assignmentKey === target.assignmentKey
+      && record.stationCode === target.stationCode
+      && record.originalStationCode === target.originalStationCode
+      && record.startDate === target.startDate
+      && record.endDate === target.endDate
+      && record.shiftName === target.shiftName
+    ));
+}
+
+function buildDispatchImportRowResult_(status, rowNumber, record, messages) {
+  const messageList = Array.isArray(messages) ? messages.filter(Boolean) : [];
+  return {
+    rowNumber,
+    status,
+    message: status === 'ready' ? '' : messageList.join('\n'),
+    warnings: status === 'ready' ? messageList : [],
+    startDate: record.startDate,
+    endDate: record.endDate,
+    stationName: record.stationName,
+    originalStationName: record.originalStationName,
+    nurseName: record.nurseName,
+    nurseEmail: record.nurseEmail,
+    shiftName: record.shiftName,
+    dispatchDays: getDispatchDays_(record)
+  };
+}
+
+function summarizeDispatchImportRows_(rows) {
+  const summary = {
+    totalRows: rows.length,
+    readyCount: 0,
+    skippedCount: 0,
+    errorCount: 0,
+    warningCount: 0
+  };
+  rows.forEach((row) => {
+    if (row.status === 'ready') summary.readyCount += 1;
+    if (row.status === 'skip') summary.skippedCount += 1;
+    if (row.status === 'error') summary.errorCount += 1;
+    if (row.warnings && row.warnings.length) summary.warningCount += 1;
+  });
+  return summary;
+}
+
+function serializeWorkHourDispatchImportPlan_(plan) {
+  return {
+    summary: plan.summary,
+    rows: (plan.rows || []).map((row) => ({
+      rowNumber: row.rowNumber,
+      status: row.status,
+      message: row.message,
+      warnings: row.warnings || [],
+      startDate: row.startDate,
+      endDate: row.endDate,
+      stationName: row.stationName,
+      originalStationName: row.originalStationName,
+      nurseName: row.nurseName,
+      nurseEmail: row.nurseEmail,
+      shiftName: row.shiftName,
+      dispatchDays: row.dispatchDays
+    }))
+  };
 }
 
 function createStation(payload) {
@@ -888,6 +1427,7 @@ function buildDispatchContext_(source, viewerEmail, options) {
       isStationManager: managedStations.length > 0,
       canUseTestMode,
       canCreateStation: managedStations.length > 0 || canUseTestMode,
+      canImportDispatchRecords: managedStationCodes.size > 0,
       testMode
     },
     managedStationCodes,
@@ -1033,6 +1573,13 @@ function assertCanCreateStation_(context) {
   const canCreate = Boolean(context && context.viewer && context.viewer.canCreateStation);
   if (!canCreate) {
     throw new Error('您沒有新增駐站的權限。');
+  }
+}
+
+function assertCanImportDispatchRecords_(context) {
+  const canImport = Boolean(context && context.viewer && context.viewer.canImportDispatchRecords);
+  if (!canImport) {
+    throw new Error('您沒有正式匯入調派資料的權限。請確認登入帳號是駐站管理者。');
   }
 }
 
@@ -1272,8 +1819,11 @@ function normalizeWorkHourPayload_(payload, context, viewerEmail) {
   if (member.isUnavailable) {
     throw new Error(`${member.name || member.email} 目前狀態為「${member.status || '不可調配'}」，不得調派。`);
   }
+  const originalStationCode = normalizeOrgCode_(member.orgCode);
+  const originalStationName = String(member.orgName || originalStationCode).trim();
+  const isTemporaryDispatch = Boolean(originalStationCode && originalStationCode !== station.code);
   const isTestMode = Boolean(context && context.viewer && context.viewer.testMode);
-  if (!isTestMode && !isExternalTarget && !isMobileCaseDispatch && context.managedStationCodes && !context.managedStationCodes.has(member.orgCode)) {
+  if (!isTestMode && !isTemporaryDispatch && !isExternalTarget && !isMobileCaseDispatch && context.managedStationCodes && !context.managedStationCodes.has(member.orgCode)) {
     throw new Error('正常班只能調派自己管理範圍內的護理師。');
   }
 
@@ -1281,9 +1831,6 @@ function normalizeWorkHourPayload_(payload, context, viewerEmail) {
   const endTime = normalizeTime_(payload.endTime);
   const hours = normalizeHours_(payload.hours, startTime, endTime);
   const note = normalizeShortText_(payload.note || '', '備註', 300);
-  const originalStationCode = normalizeOrgCode_(member.orgCode);
-  const originalStationName = String(member.orgName || originalStationCode).trim();
-  const isTemporaryDispatch = Boolean(originalStationCode && originalStationCode !== station.code);
   const dispatchDays = countDateRangeDays_(startDate, endDate);
   const dispatchTotalHours = calculateDispatchTotalHours_(hours, dispatchDays);
 
