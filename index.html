@@ -871,7 +871,6 @@
     .station-color-21 { background: #6d28d9; }
 
     .schedule-cell {
-      position: relative;
       vertical-align: top;
       background: #fff;
       min-height: 58px;
@@ -1074,20 +1073,6 @@
       flex: 0 0 auto;
     }
 
-    .schedule-cell-actions {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 6px;
-      opacity: 0.35;
-      transition: opacity 0.15s ease;
-    }
-
-    .schedule-cell:hover .schedule-cell-actions,
-    .schedule-cell:focus-within .schedule-cell-actions {
-      opacity: 1;
-    }
-
-    .schedule-action-btn,
     .movement-action-btn {
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -1098,10 +1083,6 @@
       font-weight: 900;
       line-height: 1.2;
       white-space: nowrap;
-    }
-
-    .schedule-action-btn {
-      color: var(--primary-strong);
     }
 
     .movement-action-btn {
@@ -3052,54 +3033,12 @@
     }
 
     function handleScheduleBodyClick(event) {
-      const addButton = event.target.closest('[data-schedule-add]');
-      if (addButton && el.scheduleBody.contains(addButton)) {
-        event.preventDefault();
-        event.stopPropagation();
-        prepareScheduleDispatch(
-          addButton.getAttribute('data-schedule-station'),
-          addButton.getAttribute('data-schedule-start'),
-          addButton.getAttribute('data-schedule-end')
-        );
-        return;
-      }
-
       const deleteButton = event.target.closest('[data-schedule-delete]');
       if (deleteButton && el.scheduleBody.contains(deleteButton)) {
         event.preventDefault();
         event.stopPropagation();
         deleteScheduleTemporaryRecord(deleteButton.getAttribute('data-schedule-delete'));
       }
-    }
-
-    function prepareScheduleDispatch(stationCode, rangeStart, rangeEnd) {
-      const station = getStationByCode(stationCode);
-      const startDate = normalizeDateInput(rangeStart);
-      const endDate = normalizeDateInput(rangeEnd) || startDate;
-      if (!station || !startDate || !endDate) {
-        setStatus('無法帶入月曆格資料，請重新整理後再試。', 'error');
-        return;
-      }
-      if (isEditingRecord()) {
-        const confirmed = window.confirm('目前正在修改既有調派。要放棄修改並改為新增一筆調派嗎？');
-        if (!confirmed) return;
-      }
-
-      resetForm();
-      el.dispatchTargetMode.value = 'single';
-      el.dispatchStartDate.value = startDate;
-      el.dispatchEndDate.value = endDate;
-      el.stationSelect.value = station.code;
-      syncStationPicker();
-      renderOriginStationOptions();
-      renderFormNurseOptions();
-      updateDispatchTargetModeUi();
-      updateDispatchRuleNote();
-      updateStationActionButtons();
-      closeStationPicker();
-      const rangeText = startDate === endDate ? formatFullDate(startDate) : `${formatFullDate(startDate)} 至 ${formatFullDate(endDate)}`;
-      setStatus(`已帶入 ${getStationDisplayName(station)}｜${rangeText}，請選擇來源駐站與護理師後新增調派。`, 'success');
-      el.dispatchPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function deleteScheduleTemporaryRecord(id) {
@@ -3429,11 +3368,10 @@
         ? `人數 ${formatNumber(baseCount)}`
         : `人數 ${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
       const movementHtml = buildGroupedMovementEntriesHtml(movements, stationCode, dateString, dateString);
-      const actionHtml = buildScheduleAddActionHtml(stationCode, dateString, dateString);
 
       return {
         className,
-        html: `<div class="${countClassName}">${escapeHtml(countText)}</div>${movementHtml}${actionHtml}`
+        html: `<div class="${countClassName}">${escapeHtml(countText)}</div>${movementHtml}`
       };
     }
 
@@ -3562,11 +3500,10 @@
         ? `人數 ${formatNumber(baseCount)}`
         : `人數 ${formatNumber(baseCount)}→${formatNumber(adjustedCount)}`;
       const movementHtml = buildGroupedMovementEntriesHtml(movements, stationCode, week.start, week.end);
-      const actionHtml = buildScheduleAddActionHtml(stationCode, week.start, week.end);
 
       return {
         className,
-        html: `<div class="${countClassName}">${escapeHtml(countText)}</div>${movementHtml}${actionHtml}`
+        html: `<div class="${countClassName}">${escapeHtml(countText)}</div>${movementHtml}`
       };
     }
 
@@ -3595,23 +3532,6 @@
 
     function buildRelatedStationTextHtml(prefix, stationName) {
       return `<span>${escapeHtml(prefix)}：${escapeHtml(stationName || '未命名駐站')}</span>`;
-    }
-
-    function buildScheduleAddActionHtml(stationCode, rangeStart, rangeEnd) {
-      if (!stationCode || !rangeStart || !rangeEnd) return '';
-      return `
-        <div class="schedule-cell-actions">
-          <button
-            class="schedule-action-btn"
-            type="button"
-            data-schedule-add="1"
-            data-schedule-station="${escapeHtml(stationCode)}"
-            data-schedule-start="${escapeHtml(rangeStart)}"
-            data-schedule-end="${escapeHtml(rangeEnd)}"
-            title="帶入此駐站與日期新增調派"
-          >新增</button>
-        </div>
-      `;
     }
 
     function buildTemporaryStationGroupTitleHtml(stationCode, stationName) {
