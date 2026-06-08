@@ -2109,6 +2109,7 @@ function buildFairnessStationStats_(records, stations) {
       const targetStat = getFairnessStationStat_(stationMap, targetCode, record.stationName || targetCode);
       targetStat.incomingCount += 1;
       targetStat.incomingDays += days;
+      targetStat.incomingPersonDays += days;
       targetStat.incomingHours += hours;
       if (record.assignmentKey) targetStat.nurseKeys.add(record.assignmentKey);
     }
@@ -2116,6 +2117,7 @@ function buildFairnessStationStats_(records, stations) {
       const sourceStat = getFairnessStationStat_(stationMap, sourceCode, record.originalStationName || sourceCode);
       sourceStat.outgoingCount += 1;
       sourceStat.outgoingDays += days;
+      sourceStat.outgoingPersonDays += days;
       sourceStat.outgoingHours += hours;
       if (record.assignmentKey) sourceStat.nurseKeys.add(record.assignmentKey);
     }
@@ -2131,11 +2133,16 @@ function buildFairnessStationStats_(records, stations) {
       totalCount: stat.incomingCount + stat.outgoingCount,
       incomingDays: stat.incomingDays,
       outgoingDays: stat.outgoingDays,
+      incomingPersonDays: stat.incomingPersonDays,
+      outgoingPersonDays: stat.outgoingPersonDays,
+      totalPersonDays: stat.incomingPersonDays + stat.outgoingPersonDays,
       incomingHours: Math.round(stat.incomingHours * 100) / 100,
       outgoingHours: Math.round(stat.outgoingHours * 100) / 100,
       nurseCount: stat.nurseKeys.size
     }))
     .sort((a, b) => {
+      const personDayCompare = Number(b.totalPersonDays || 0) - Number(a.totalPersonDays || 0);
+      if (personDayCompare !== 0) return personDayCompare;
       const countCompare = Number(b.totalCount || 0) - Number(a.totalCount || 0);
       if (countCompare !== 0) return countCompare;
       return String(a.stationName || a.stationCode).localeCompare(String(b.stationName || b.stationCode), 'zh-Hant');
@@ -2150,6 +2157,8 @@ function createFairnessStationStat_(stationCode, stationName) {
     outgoingCount: 0,
     incomingDays: 0,
     outgoingDays: 0,
+    incomingPersonDays: 0,
+    outgoingPersonDays: 0,
     incomingHours: 0,
     outgoingHours: 0,
     nurseKeys: new Set()

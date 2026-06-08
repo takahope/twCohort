@@ -124,6 +124,25 @@
       color: #92400e;
     }
 
+    .btn.is-busy {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn.is-busy::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      flex: 0 0 auto;
+      animation: spin 0.75s linear infinite;
+    }
+
     .toolbar {
       padding: 14px 24px;
       display: grid;
@@ -1455,6 +1474,93 @@
       text-align: center;
     }
 
+    .loading-content {
+      display: inline-grid;
+      justify-items: center;
+      gap: 12px;
+      color: var(--text);
+      font-weight: 900;
+    }
+
+    .loading-detail {
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #d9e5e7;
+      border-right-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+
+    .busy-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(248, 250, 252, 0.72);
+      backdrop-filter: blur(2px);
+    }
+
+    .busy-box {
+      min-width: min(360px, 100%);
+      max-width: 460px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+    }
+
+    .busy-message {
+      color: var(--text);
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .busy-detail {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .table-loading-row td {
+      padding: 24px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .inline-loading {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .inline-loading .spinner {
+      width: 20px;
+      height: 20px;
+      border-width: 2px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
     .hidden {
       display: none !important;
     }
@@ -1561,8 +1667,23 @@
       </div>
     </header>
 
-    <div id="loading" class="loading-screen">正在讀取駐站與護理師資料...</div>
+    <div id="loading" class="loading-screen">
+      <div class="loading-content">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="loading-message">正在讀取駐站與護理師資料...</span>
+        <span class="loading-detail">資料由 Apps Script 讀取，請稍候。</span>
+      </div>
+    </div>
     <div id="login-notice" class="login-notice hidden" role="status" aria-live="polite"></div>
+    <div id="app-busy" class="busy-overlay hidden" role="status" aria-live="polite" aria-busy="true">
+      <div class="busy-box">
+        <span class="spinner" aria-hidden="true"></span>
+        <div>
+          <div class="busy-message" id="app-busy-message">處理中...</div>
+          <div class="busy-detail" id="app-busy-detail">系統正在與 Apps Script 同步，請不要重複操作。</div>
+        </div>
+      </div>
+    </div>
 
     <main id="app-main" class="layout hidden">
       <section class="panel dispatch-panel" id="dispatch-panel">
@@ -1770,14 +1891,14 @@
                 <strong id="fairness-total-nurses">0</strong>
               </div>
               <div class="fairness-stat">
-                <span class="cell-sub">累計天數</span>
+                <span class="cell-sub">累計人天</span>
                 <strong id="fairness-total-hours">0</strong>
               </div>
             </div>
             <div class="fairness-grid">
               <div class="fairness-table-card">
                 <div class="fairness-table-header">
-                  <div class="fairness-table-title">各駐站臨時徵調次數</div>
+                  <div class="fairness-table-title">各駐站臨時徵調人天</div>
                   <div class="muted" id="fairness-station-count">0 筆</div>
                 </div>
                 <div class="fairness-table-wrap">
@@ -1785,10 +1906,10 @@
                     <thead>
                       <tr>
                         <th>駐站</th>
-                        <th>調入</th>
-                        <th>調出</th>
-                        <th>合計</th>
-                        <th>天數</th>
+                        <th>調入人天</th>
+                        <th>調出人天</th>
+                        <th>合計人天</th>
+                        <th>涉及人員</th>
                       </tr>
                     </thead>
                     <tbody id="fairness-station-body"></tbody>
@@ -1939,6 +2060,7 @@
       recordsAutoRefreshTimer: null,
       isAutoRefreshing: false,
       isLoadingData: false,
+      busyCount: 0,
       dataRequestId: 0,
       fairnessRequestId: 0,
       fairness: {
@@ -2027,6 +2149,10 @@
         'test-mode-btn',
         'toolbar',
         'loading',
+        'loading-message',
+        'app-busy',
+        'app-busy-message',
+        'app-busy-detail',
         'app-main',
         'filter-date-from',
         'filter-date-to',
@@ -2265,6 +2391,8 @@
     async function loadData(filters, options) {
       const settings = options || {};
       const isSilent = Boolean(settings.silent);
+      const isInitialLoad = !state.viewer;
+      let didShowBusy = false;
       const requestId = state.dataRequestId + 1;
       state.dataRequestId = requestId;
       if (!isSilent) state.isLoadingData = true;
@@ -2272,6 +2400,10 @@
         setPageLoading(true);
         setStatus('');
         if (el.recordsStatus) setRecordsStatus('');
+        if (!isInitialLoad) {
+          showBusy(getDataLoadingMessage(settings.reason), '月曆、駐站與年度統計狀態會在完成後更新。');
+          didShowBusy = true;
+        }
       }
       try {
         const response = await callServer('getDispatchAppData', filters || {});
@@ -2295,7 +2427,16 @@
           if (!isSilent) state.isLoadingData = false;
           if (!isSilent) setPageLoading(false);
         }
+        if (didShowBusy) hideBusy();
       }
+    }
+
+    function getDataLoadingMessage(reason) {
+      if (reason === 'test-mode-toggle') {
+        return state.testMode ? '正在切回一般模式...' : '正在啟用測試模式...';
+      }
+      if (reason === 'manual') return '正在查詢調派資料...';
+      return '正在更新月曆與調派資料...';
     }
 
     function applyData(response, options) {
@@ -2358,9 +2499,9 @@
       if (!state.stations.length) {
         el.appMain.classList.add('hidden');
         el.loading.classList.remove('hidden');
-        el.loading.textContent = state.viewer && state.viewer.canUseTestMode
+        setLoadingScreen(state.viewer && state.viewer.canUseTestMode
           ? '目前一般權限沒有可管理的駐站。可按右上角「啟用測試模式」讀取測試候選。'
-          : '目前登入帳號沒有可管理的駐站。';
+          : '目前登入帳號沒有可管理的駐站。', '', true);
         return;
       }
 
@@ -2557,8 +2698,7 @@
       if (state.isLoadingData) return;
       const nextTestMode = !state.testMode;
       const loadingText = nextTestMode ? '啟用測試模式中' : '關閉測試模式中';
-      el.testModeBtn.disabled = true;
-      el.testModeBtn.textContent = loadingText;
+      setButtonBusy(el.testModeBtn, true, loadingText);
       const ok = await loadData({
         ...collectFilters(),
         testMode: nextTestMode
@@ -2566,6 +2706,7 @@
         reason: 'test-mode-toggle'
       });
       if (!ok) renderTestModeControl();
+      setButtonBusy(el.testModeBtn, false, state.testMode ? '關閉測試模式' : '啟用測試模式');
     }
 
     function notifyLoginComplete() {
@@ -3281,8 +3422,9 @@
       };
 
       state.isCreatingStation = true;
-      el.stationSaveBtn.disabled = true;
+      setButtonBusy(el.stationSaveBtn, true, '新增中');
       setStationStatus('新增中...');
+      showBusy('正在新增駐站...', state.testMode ? '測試模式會新增到測試駐站清單，不會寫入正式試算表。' : '系統正在寫入正式駐站資料。');
 
       try {
         const response = await callServer('createStation', payload);
@@ -3303,7 +3445,8 @@
         setStationStatus(error && error.message ? error.message : '新增駐站失敗。', 'error');
       } finally {
         state.isCreatingStation = false;
-        el.stationSaveBtn.disabled = false;
+        setButtonBusy(el.stationSaveBtn, false, '新增駐站');
+        hideBusy();
       }
     }
 
@@ -3324,6 +3467,7 @@
       state.isDeletingStation = true;
       updateStationActionButtons();
       setStatus('刪除駐站中...');
+      showBusy('正在刪除駐站...', state.testMode ? '測試模式只會調整測試駐站視圖，不會刪除正式試算表資料。' : '系統會確認無有效調派與人員配置後才刪除。');
 
       try {
         const response = await callServer('deleteStation', {
@@ -3342,6 +3486,7 @@
       } finally {
         state.isDeletingStation = false;
         updateStationActionButtons();
+        hideBusy();
       }
     }
 
@@ -3466,9 +3611,10 @@
       }
 
       state.isAssigningPendingRecord = true;
-      el.pendingAssignmentSaveBtn.disabled = true;
+      setButtonBusy(el.pendingAssignmentSaveBtn, true, '指派中');
       setPendingAssignmentStatus('指派中...');
       setRecordsStatus('待指派需求確認中，完成後會刷新月曆與年度紀錄...');
+      showBusy('正在指派待確認人選...', '完成後會更新月曆、調派紀錄與年度統計。');
       try {
         const response = await callServer('assignPendingWorkHourDispatch', {
           id,
@@ -3497,7 +3643,8 @@
         setRecordsStatus(`待指派需求指派失敗：${message} 月曆與紀錄未變更。`, 'error');
       } finally {
         state.isAssigningPendingRecord = false;
-        el.pendingAssignmentSaveBtn.disabled = false;
+        setButtonBusy(el.pendingAssignmentSaveBtn, false, '確認指派');
+        hideBusy();
       }
     }
 
@@ -3536,6 +3683,7 @@
       setFairnessLoading(true);
       if (!settings.silent) {
         setRecordsStatus('年度臨時徵調統計查詢中...');
+        showBusy('正在查詢年度臨時徵調統計...', '系統會重新計算駐站人天與護理師徵調狀態。');
       }
 
       try {
@@ -3570,11 +3718,13 @@
       } catch (error) {
         if (requestId !== state.fairnessRequestId) return false;
         setRecordsStatus(error && error.message ? error.message : '年度臨時徵調統計讀取失敗。', 'error');
+        renderFairnessStats();
         return false;
       } finally {
         if (requestId === state.fairnessRequestId) {
           state.fairness.isLoading = false;
           setFairnessLoading(false);
+          if (!settings.silent) hideBusy();
         }
       }
     }
@@ -3587,7 +3737,7 @@
 
       el.fairnessTotalRecords.textContent = formatNumber(records.length);
       el.fairnessTotalNurses.textContent = formatNumber(nurseStats.length);
-      el.fairnessTotalHours.textContent = `${formatNumber(totalDays)} 天`;
+      el.fairnessTotalHours.textContent = formatPersonDaysText(totalDays);
       el.recordCountDisplay.value = state.fairness.isLoading
         ? '查詢中'
         : `${formatNumber(records.length)} 筆`;
@@ -3611,31 +3761,33 @@
         code: stat.stationCode,
         name: stat.stationName || stat.stationCode
       };
-      const incomingDays = Number(stat.incomingDays || 0);
-      const outgoingDays = Number(stat.outgoingDays || 0);
+      const incomingPersonDays = getStationIncomingPersonDays(stat);
+      const outgoingPersonDays = getStationOutgoingPersonDays(stat);
+      const totalPersonDays = incomingPersonDays + outgoingPersonDays;
       const tooltip = [
         stat.stationName || stat.stationCode || '未命名駐站',
-        `調入 ${formatNumber(stat.incomingCount)} 次 / ${formatDaysText(incomingDays)}`,
-        `調出 ${formatNumber(stat.outgoingCount)} 次 / ${formatDaysText(outgoingDays)}`,
-        `合計 ${formatNumber(stat.totalCount)} 次 / ${formatDaysText(incomingDays + outgoingDays)}`,
+        `調入 ${formatPersonDaysText(incomingPersonDays)}（${formatNumber(stat.incomingCount)} 筆）`,
+        `調出 ${formatPersonDaysText(outgoingPersonDays)}（${formatNumber(stat.outgoingCount)} 筆）`,
+        `合計 ${formatPersonDaysText(totalPersonDays)}（${formatNumber(stat.totalCount)} 筆）`,
         `涉及人員 ${formatNumber(stat.nurseCount)} 人`
       ].join('\n');
       return `
         <tr title="${escapeHtml(tooltip)}">
           <td title="${escapeHtml(stat.stationName || stat.stationCode || '未命名駐站')}">${buildStationLabelHtml(station, stat.stationName || stat.stationCode || '未命名駐站')}</td>
           <td>
-            <div class="cell-main">${escapeHtml(formatNumber(stat.incomingCount))}</div>
-            <div class="cell-sub">${escapeHtml(formatDaysText(incomingDays))}</div>
+            <div class="cell-main">${escapeHtml(formatPersonDaysText(incomingPersonDays))}</div>
+            <div class="cell-sub">${escapeHtml(formatNumber(stat.incomingCount))} 筆</div>
           </td>
           <td>
-            <div class="cell-main">${escapeHtml(formatNumber(stat.outgoingCount))}</div>
-            <div class="cell-sub">${escapeHtml(formatDaysText(outgoingDays))}</div>
+            <div class="cell-main">${escapeHtml(formatPersonDaysText(outgoingPersonDays))}</div>
+            <div class="cell-sub">${escapeHtml(formatNumber(stat.outgoingCount))} 筆</div>
           </td>
           <td>
-            <div class="cell-main"><strong>${escapeHtml(formatNumber(stat.totalCount))}</strong></div>
+            <div class="cell-main"><strong>${escapeHtml(formatPersonDaysText(totalPersonDays))}</strong></div>
+            <div class="cell-sub">${escapeHtml(formatNumber(stat.totalCount))} 筆</div>
           </td>
           <td>
-            <div class="cell-main">${escapeHtml(formatDaysText(incomingDays + outgoingDays))}</div>
+            <div class="cell-main">${escapeHtml(formatNumber(stat.nurseCount))} 人</div>
           </td>
         </tr>
       `;
@@ -3676,8 +3828,7 @@
 
     function setFairnessLoading(isLoading) {
       if (el.fairnessLoadBtn) {
-        el.fairnessLoadBtn.disabled = isLoading;
-        el.fairnessLoadBtn.textContent = isLoading ? '查詢中' : '查詢統計';
+        setButtonBusy(el.fairnessLoadBtn, isLoading, isLoading ? '查詢中' : '查詢統計');
       }
       if (el.recordCountDisplay && isLoading) {
         el.recordCountDisplay.value = '查詢中';
@@ -3688,6 +3839,24 @@
       if (el.exportRecordsBtn) {
         el.exportRecordsBtn.disabled = isLoading || !state.fairness.ready;
       }
+      if (isLoading) {
+        if (el.fairnessStationBody) {
+          el.fairnessStationBody.innerHTML = buildTableLoadingRowHtml(5, '正在計算各駐站人天...');
+        }
+        if (el.fairnessNurseBody) {
+          el.fairnessNurseBody.innerHTML = buildTableLoadingRowHtml(5, '正在計算護理師徵調次數...');
+        }
+      }
+    }
+
+    function buildTableLoadingRowHtml(colspan, message) {
+      return `
+        <tr class="table-loading-row">
+          <td colspan="${escapeHtml(String(colspan || 1))}">
+            <span class="inline-loading"><span class="spinner" aria-hidden="true"></span>${escapeHtml(message || '處理中...')}</span>
+          </td>
+        </tr>
+      `;
     }
 
     function renderScheduleMatrix() {
@@ -4744,22 +4913,22 @@
         ['查詢護理師', getFilterNurseDisplayText(filters.nurseEmail)],
         ['臨時徵調紀錄', formatNumber(records.length)],
         ['涉及護理師', formatNumber(nurseStats.length)],
-        ['累計天數', formatNumber(records.reduce((sum, record) => sum + getDispatchDays(record), 0))],
+        ['累計人天', formatNumber(records.reduce((sum, record) => sum + getDispatchDays(record), 0))],
         [],
-        ['各駐站臨時徵調次數'],
-        ['駐站', '調入次數', '調出次數', '合計次數', '涉及人員', '調入天數', '調出天數', '合計天數']
+        ['各駐站臨時徵調人天'],
+        ['駐站', '調入人天', '調出人天', '合計人天', '涉及人員', '調入筆數', '調出筆數', '合計筆數']
       ];
 
       stationStats.forEach((stat) => {
         rows.push([
           stat.stationName || stat.stationCode || '',
+          formatNumber(getStationIncomingPersonDays(stat)),
+          formatNumber(getStationOutgoingPersonDays(stat)),
+          formatNumber(getStationTotalPersonDays(stat)),
+          formatNumber(stat.nurseCount),
           formatNumber(stat.incomingCount),
           formatNumber(stat.outgoingCount),
-          formatNumber(stat.totalCount),
-          formatNumber(stat.nurseCount),
-          formatNumber(stat.incomingDays),
-          formatNumber(stat.outgoingDays),
-          formatNumber(Number(stat.incomingDays || 0) + Number(stat.outgoingDays || 0))
+          formatNumber(stat.totalCount)
         ]);
       });
 
@@ -5155,10 +5324,12 @@
       };
 
       state.isSaving = true;
-      el.saveBtn.disabled = true;
       const actionText = isPending ? '待指派需求建立' : (payload.id ? '調派更新' : '調派建立');
+      const saveButtonLabel = el.saveBtn.textContent || '新增調派';
+      setButtonBusy(el.saveBtn, true, isPending ? '建立中' : (isBatch ? '儲存中' : `${actionText}中`));
       setStatus(isPending ? '建立待指派需求中...' : (isBatch ? '儲存整站調派中...' : `${actionText}中...`));
       setRecordsStatus(`${actionText}中，完成後會刷新月曆與年度紀錄...`);
+      showBusy(isPending ? '正在建立待指派需求...' : (isBatch ? '正在儲存整站調派...' : `正在${actionText}...`), '完成後會自動刷新月曆與年度統計，請不要重複送出。');
 
       try {
         const serverFunction = isPending
@@ -5186,7 +5357,9 @@
         setDispatchActionError(error && error.message ? error.message : '儲存失敗。', payload && payload.id ? '調派更新失敗' : '調派建立失敗');
       } finally {
         state.isSaving = false;
-        el.saveBtn.disabled = false;
+        setButtonBusy(el.saveBtn, false, saveButtonLabel);
+        updateDispatchTargetModeUi();
+        hideBusy();
       }
     }
 
@@ -5269,6 +5442,7 @@
       state.isDeletingRecord = true;
       setStatus(settings.loadingMessage || '刪除中...');
       setRecordsStatus('調派移除中，完成後會刷新月曆與年度紀錄...');
+      showBusy(settings.loadingMessage || '正在刪除調派...', '完成後會自動刷新月曆與年度統計。');
       try {
         const response = await callServer('deleteWorkHourDispatch', {
           id,
@@ -5293,6 +5467,7 @@
         setDispatchActionError(error && error.message ? error.message : '刪除失敗。', '刪除失敗');
       } finally {
         state.isDeletingRecord = false;
+        hideBusy();
       }
     }
 
@@ -5530,6 +5705,23 @@
 
     function formatDaysText(days) {
       return `${formatNumber(days)} 天`;
+    }
+
+    function formatPersonDaysText(days) {
+      return `${formatNumber(days)} 人天`;
+    }
+
+    function getStationIncomingPersonDays(stat) {
+      return Number(stat && (stat.incomingPersonDays || stat.incomingDays) || 0);
+    }
+
+    function getStationOutgoingPersonDays(stat) {
+      return Number(stat && (stat.outgoingPersonDays || stat.outgoingDays) || 0);
+    }
+
+    function getStationTotalPersonDays(stat) {
+      if (stat && typeof stat.totalPersonDays !== 'undefined') return Number(stat.totalPersonDays || 0);
+      return getStationIncomingPersonDays(stat) + getStationOutgoingPersonDays(stat);
     }
 
     function getRecordYear(record) {
@@ -5784,16 +5976,52 @@
       });
     }
 
+    function setButtonBusy(button, isBusy, label) {
+      if (!button) return;
+      button.disabled = Boolean(isBusy);
+      button.classList.toggle('is-busy', Boolean(isBusy));
+      if (typeof label !== 'undefined') button.textContent = label;
+    }
+
+    function showBusy(message, detail) {
+      state.busyCount += 1;
+      if (!el.appBusy) return;
+      if (el.appBusyMessage) el.appBusyMessage.textContent = message || '處理中...';
+      if (el.appBusyDetail) {
+        el.appBusyDetail.textContent = detail || '系統正在與 Apps Script 同步，請不要重複操作。';
+      }
+      el.appBusy.classList.remove('hidden');
+    }
+
+    function hideBusy() {
+      state.busyCount = Math.max(0, Number(state.busyCount || 0) - 1);
+      if (!el.appBusy || state.busyCount > 0) return;
+      el.appBusy.classList.add('hidden');
+    }
+
+    function setLoadingScreen(message, detail, isError) {
+      if (!el.loading) return;
+      const safeMessage = escapeHtml(message || '');
+      const safeDetail = escapeHtml(detail || '');
+      el.loading.innerHTML = `
+        <div class="loading-content">
+          ${isError ? '' : '<span class="spinner" aria-hidden="true"></span>'}
+          <span id="loading-message">${safeMessage}</span>
+          ${safeDetail ? `<span class="loading-detail">${safeDetail}</span>` : ''}
+        </div>
+      `;
+      el.loadingMessage = document.getElementById('loading-message');
+    }
+
     function setPageLoading(isLoading) {
       const isInitialLoad = !state.viewer;
       if (isLoading && isInitialLoad) {
         el.loading.classList.remove('hidden');
-        el.loading.textContent = '正在讀取駐站與護理師資料...';
+        setLoadingScreen('正在讀取駐站與護理師資料...', '資料由 Apps Script 讀取，請稍候。');
       } else if (state.stations.length) {
         el.loading.classList.add('hidden');
       }
-      el.reloadBtn.disabled = isLoading;
-      el.reloadBtn.textContent = isLoading ? '查詢中' : '查詢';
+      setButtonBusy(el.reloadBtn, isLoading, isLoading ? '查詢中' : '查詢');
       if (el.fairnessLoadBtn) el.fairnessLoadBtn.disabled = isLoading || state.fairness.isLoading;
       if (el.exportRecordsBtn) el.exportRecordsBtn.disabled = isLoading || state.fairness.isLoading || !state.fairness.ready;
       if (el.testModeBtn && !el.testModeBtn.classList.contains('hidden')) {
@@ -5804,7 +6032,7 @@
     function showLoadError(message) {
       el.appMain.classList.add('hidden');
       el.loading.classList.remove('hidden');
-      el.loading.textContent = message;
+      setLoadingScreen(message, '請確認登入權限或稍後重新整理。', true);
       el.viewerName.textContent = '讀取失敗';
       el.viewerEmail.textContent = '';
     }
