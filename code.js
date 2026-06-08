@@ -1807,12 +1807,9 @@ function findNurseAssignmentByKey_(source, assignmentKey) {
 }
 
 function assertNoDuplicatePendingDispatchDemand_(target, records) {
-  const duplicate = (Array.isArray(records) ? records : [])
-    .map(normalizeStoredDispatchRecord_)
+  const duplicate = normalizeActiveStoredDispatchRecords_(records)
     .filter((record) => (
-      record
-      && record.status === '有效'
-      && isPendingAssignmentRecord_(record)
+      isPendingAssignmentRecord_(record)
       && record.stationCode === target.stationCode
       && record.originalStationCode === target.originalStationCode
       && record.startDate === target.startDate
@@ -1893,12 +1890,9 @@ function applyDispatchRecordAvailability_(record, assignmentAvailabilityByKey) {
 }
 
 function assertNoOverlappingNurseDispatch_(target, records) {
-  const conflict = (Array.isArray(records) ? records : [])
-    .map(normalizeStoredDispatchRecord_)
+  const conflict = normalizeActiveStoredDispatchRecords_(records)
     .filter((record) => (
-      record
-      && record.status === '有效'
-      && record.assignmentKey === target.assignmentKey
+      record.assignmentKey === target.assignmentKey
       && record.id !== target.id
       && dateRangesOverlap_(record.startDate, record.endDate, target.startDate, target.endDate)
     ))
@@ -1916,12 +1910,9 @@ function assertNoOverlappingNurseDispatch_(target, records) {
 function assertTemporaryDispatchCooldown_(target, records) {
   if (!isTemporaryDispatchRecord_(target)) return;
 
-  const conflict = (Array.isArray(records) ? records : [])
-    .map(normalizeStoredDispatchRecord_)
+  const conflict = normalizeActiveStoredDispatchRecords_(records)
     .filter((record) => (
-      record
-      && record.status === '有效'
-      && record.assignmentKey === target.assignmentKey
+      record.assignmentKey === target.assignmentKey
       && record.id !== target.id
       && isTemporaryDispatchRecord_(record)
       && !hasTemporaryDispatchCooldownGap_(record, target)
@@ -1946,7 +1937,7 @@ function buildFairnessStationStats_(records, stations) {
     stationMap.set(station.code, createFairnessStationStat_(station.code, station.name || station.code));
   });
 
-  (Array.isArray(records) ? records : []).forEach((record) => {
+  normalizeActiveStoredDispatchRecords_(records).forEach((record) => {
     const days = getDispatchDays_(record);
     const hours = getDispatchTotalHours_(record);
     const targetCode = normalizeOrgCode_(record.stationCode);
@@ -2011,7 +2002,7 @@ function getFairnessStationStat_(stationMap, stationCode, stationName) {
 
 function buildFairnessNurseStats_(records) {
   const nurseMap = new Map();
-  (Array.isArray(records) ? records : []).forEach((record) => {
+  normalizeActiveStoredDispatchRecords_(records).forEach((record) => {
     const key = record.assignmentKey || record.nurseEmail || record.nurseName;
     if (!key) return;
     if (!nurseMap.has(key)) {
@@ -2239,12 +2230,9 @@ function syncTemporaryDispatchColumn_(source, records, assignmentKeys) {
 }
 
 function buildTemporaryDispatchCellValue_(records, assignmentKey) {
-  const activeTemporaryRecords = (Array.isArray(records) ? records : [])
-    .map(normalizeStoredDispatchRecord_)
+  const activeTemporaryRecords = normalizeActiveStoredDispatchRecords_(records)
     .filter((record) => (
-      record
-      && record.status === '有效'
-      && record.assignmentKey === assignmentKey
+      record.assignmentKey === assignmentKey
       && record.originalStationCode
       && record.stationCode
       && record.originalStationCode !== record.stationCode
@@ -2279,22 +2267,22 @@ function buildTemporaryDispatchCellValue_(records, assignmentKey) {
 function getStoredDispatchRecords_() {
   const cachedRecords = getCachedJson_(APP_CONFIG.recordsCacheKey);
   if (Array.isArray(cachedRecords)) {
-    return cachedRecords
-      .map(normalizeStoredDispatchRecord_)
-      .filter(isActiveStoredDispatchRecord_);
+    return normalizeActiveStoredDispatchRecords_(cachedRecords);
   }
 
-  const records = getScriptJsonStore_(APP_CONFIG.storeKey)
+  const normalizedRecords = getScriptJsonStore_(APP_CONFIG.storeKey)
     .map(normalizeStoredDispatchRecord_)
-    .filter(isActiveStoredDispatchRecord_);
+    .filter(Boolean);
+  const records = normalizedRecords.filter(isActiveStoredDispatchRecord_);
+  if (records.length !== normalizedRecords.length) {
+    setScriptJsonStore_(APP_CONFIG.storeKey, records, APP_CONFIG.maxRecords);
+  }
   putCachedJson_(APP_CONFIG.recordsCacheKey, records, APP_CONFIG.recordsCacheSeconds);
   return records;
 }
 
 function saveStoredDispatchRecords_(records) {
-  const normalized = (Array.isArray(records) ? records : [])
-    .map(normalizeStoredDispatchRecord_)
-    .filter(isActiveStoredDispatchRecord_)
+  const normalized = normalizeActiveStoredDispatchRecords_(records)
     .sort(compareDispatchRecords_)
     .slice(0, APP_CONFIG.maxRecords);
   setScriptJsonStore_(APP_CONFIG.storeKey, normalized, APP_CONFIG.maxRecords);
@@ -2358,6 +2346,12 @@ function normalizeStoredDispatchRecord_(record) {
 
 function isActiveStoredDispatchRecord_(record) {
   return Boolean(record && record.status === '有效');
+}
+
+function normalizeActiveStoredDispatchRecords_(records) {
+  return (Array.isArray(records) ? records : [])
+    .map(normalizeStoredDispatchRecord_)
+    .filter(isActiveStoredDispatchRecord_);
 }
 
 function getScriptJsonStore_(baseKey) {
