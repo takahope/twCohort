@@ -617,7 +617,7 @@ function deleteStation(payload) {
       throw new Error('請選擇要刪除的駐站。');
     }
     const effectiveSource = context.viewer.testMode ? applyTestStationOverrides_(source) : source;
-    assertCanManageStation_(context, stationCode);
+    assertCanAdministrateStation_(context, stationCode);
     assertCanDeleteStation_(effectiveSource, stationCode, context);
     if (context.viewer.testMode) {
       deleteTestStationRecord_(source, stationCode);
@@ -1367,8 +1367,12 @@ function buildDispatchContext_(source, viewerEmail, options) {
     });
   const managedStations = Array.from(stationByCode.values())
     .filter((station) => testMode || managedStationCodes.has(station.code));
-  const visibleStationCodes = new Set(managedStations.map((station) => station.code));
-  const canUseExternalSources = Boolean(testMode || managedStations.length);
+  const isStationManager = managedStations.length > 0;
+  const dispatchStations = isStationManager
+    ? Array.from(stationByCode.values())
+    : managedStations;
+  const visibleStationCodes = new Set(dispatchStations.map((station) => station.code));
+  const canUseExternalSources = Boolean(testMode || isStationManager);
   const visibleNurses = stationAssignments
     .filter((assignment) => (
       isNurseAssignment_(assignment)
@@ -1397,13 +1401,14 @@ function buildDispatchContext_(source, viewerEmail, options) {
     viewer: {
       email: viewerEmail,
       name: String(viewerPerson.name || viewerAssignment.name || '').trim(),
-      isStationManager: managedStations.length > 0,
+      isStationManager,
       canUseTestMode,
-      canCreateStation: managedStations.length > 0 || canUseTestMode,
+      canCreateStation: isStationManager || canUseTestMode,
+      managedStationCodes: Array.from(managedStationCodes),
       testMode
     },
     managedStationCodes,
-    stations: managedStations
+    stations: dispatchStations
       .sort((a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code), 'zh-Hant'))
       .map((station) => ({
         code: station.code,
@@ -1553,6 +1558,15 @@ function assertCanManageStation_(context, stationCode) {
   const canManage = context.stations.some((station) => station.code === normalizedStationCode);
   if (!canManage) {
     throw new Error('您沒有管理此駐站工時調派的權限。');
+  }
+}
+
+function assertCanAdministrateStation_(context, stationCode) {
+  const normalizedStationCode = normalizeOrgCode_(stationCode);
+  const canAdministrate = Boolean(context && context.viewer && context.viewer.testMode)
+    || Boolean(context && context.managedStationCodes && context.managedStationCodes.has(normalizedStationCode));
+  if (!canAdministrate) {
+    throw new Error('您沒有刪除此駐站管理資料的權限。共享調度僅開放工時調派，駐站資料仍限原管理者維護。');
   }
 }
 
@@ -1776,7 +1790,7 @@ function normalizeWorkHourPayload_(payload, context, viewerEmail) {
   const stationCode = normalizeOrgCode_(payload.stationCode);
   const station = context.stations.find((item) => item.code === stationCode);
   if (!station) {
-    throw new Error('只能調派自己管理範圍內的駐站。');
+    throw new Error('請選擇有效的調派目標駐站。');
   }
   const shiftName = normalizeDispatchMode_(payload.shiftName || APP_CONFIG.shiftOptions[0]);
   const isMobileCaseDispatch = isMobileCaseDispatch_(shiftName);
@@ -1849,7 +1863,7 @@ function normalizePendingWorkHourPayload_(payload, source, context, viewerEmail)
   const stationCode = normalizeOrgCode_(payload.stationCode);
   const station = context.stations.find((item) => item.code === stationCode);
   if (!station) {
-    throw new Error('只能建立自己管理範圍內駐站的待指派需求。');
+    throw new Error('請選擇有效的待指派目標駐站。');
   }
   const originalStationCode = normalizeOrgCode_(payload.originalStationCode || payload.sourceStationCode);
   const originalStation = findSourceStationByCode_(source, originalStationCode);

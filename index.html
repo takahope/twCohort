@@ -2042,6 +2042,7 @@
       scheduleDayCount: 1,
       stationByCode: new Map(),
       managedStationCodeSet: new Set(),
+      administratedStationCodeSet: new Set(),
       nurseByAssignmentKey: new Map(),
       nurseByEmail: new Map(),
       nurseListsByStation: new Map(),
@@ -2526,6 +2527,11 @@
     function rebuildDataIndexes() {
       state.stationByCode = new Map();
       state.managedStationCodeSet = new Set();
+      state.administratedStationCodeSet = new Set(
+        Array.isArray(state.viewer && state.viewer.managedStationCodes)
+          ? state.viewer.managedStationCodes.map((code) => String(code || '').trim()).filter(Boolean)
+          : []
+      );
       (state.stations || []).forEach((station) => {
         if (!station || !station.code) return;
         state.stationByCode.set(station.code, station);
@@ -2813,8 +2819,19 @@
     function updateStationActionButtons() {
       const canManageStations = Boolean(state.viewer && state.viewer.canCreateStation);
       const hasSelectedStation = Boolean(el.stationSelect.value);
+      const canDeleteSelectedStation = canAdministrateStation(el.stationSelect.value);
       el.addStationBtn.disabled = !canManageStations || state.isCreatingStation;
-      el.deleteStationBtn.disabled = !canManageStations || !hasSelectedStation || state.isDeletingStation;
+      el.deleteStationBtn.disabled = !canManageStations || !hasSelectedStation || !canDeleteSelectedStation || state.isDeletingStation;
+      el.deleteStationBtn.title = hasSelectedStation && !canDeleteSelectedStation
+        ? '共享調度可使用此目標駐站；刪除駐站資料仍限原管理者。'
+        : '';
+    }
+
+    function canAdministrateStation(stationCode) {
+      const normalizedCode = String(stationCode || '').trim();
+      if (!normalizedCode) return false;
+      if (state.testMode) return true;
+      return Boolean(state.administratedStationCodeSet && state.administratedStationCodeSet.has(normalizedCode));
     }
 
     function renderStationOptions() {
@@ -3462,6 +3479,10 @@
       const station = getStationByCode(el.stationSelect.value);
       if (!station) {
         setStatus('請先選擇要刪除的駐站。', 'error');
+        return;
+      }
+      if (!canAdministrateStation(station.code)) {
+        setStatus('共享調度可使用此目標駐站；刪除駐站資料仍限原管理者。', 'error');
         return;
       }
 
