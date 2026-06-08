@@ -518,18 +518,13 @@ function deleteWorkHourDispatch(payload) {
       throw new Error('找不到要刪除的調派紀錄。請先按「重新整理」查看最新調派內容。');
     }
 
-    assertCanManageStation_(context, records[targetIndex].stationCode);
-    assertDispatchRecordVersion_(records[targetIndex], payload, '刪除', source);
-    records[targetIndex] = {
-      ...records[targetIndex],
-      status: '已刪除',
-      version: createDispatchRecordVersion_(),
-      updatedAt: formatTimestamp_(new Date()),
-      updatedBy: viewerEmail
-    };
+    const deletedRecord = records[targetIndex];
+    assertCanManageStation_(context, deletedRecord.stationCode);
+    assertDispatchRecordVersion_(deletedRecord, payload, '刪除', source);
+    records.splice(targetIndex, 1);
 
     saveStoredDispatchRecords_(records);
-    syncTemporaryDispatchColumn_(source, records, [records[targetIndex].assignmentKey]);
+    syncTemporaryDispatchColumn_(source, records, [deletedRecord.assignmentKey]);
     lock.releaseLock();
     hasLock = false;
     return getDispatchAppData(payload && payload.filters ? payload.filters : {});
@@ -2286,12 +2281,12 @@ function getStoredDispatchRecords_() {
   if (Array.isArray(cachedRecords)) {
     return cachedRecords
       .map(normalizeStoredDispatchRecord_)
-      .filter(Boolean);
+      .filter(isActiveStoredDispatchRecord_);
   }
 
   const records = getScriptJsonStore_(APP_CONFIG.storeKey)
     .map(normalizeStoredDispatchRecord_)
-    .filter(Boolean);
+    .filter(isActiveStoredDispatchRecord_);
   putCachedJson_(APP_CONFIG.recordsCacheKey, records, APP_CONFIG.recordsCacheSeconds);
   return records;
 }
@@ -2299,7 +2294,7 @@ function getStoredDispatchRecords_() {
 function saveStoredDispatchRecords_(records) {
   const normalized = (Array.isArray(records) ? records : [])
     .map(normalizeStoredDispatchRecord_)
-    .filter(Boolean)
+    .filter(isActiveStoredDispatchRecord_)
     .sort(compareDispatchRecords_)
     .slice(0, APP_CONFIG.maxRecords);
   setScriptJsonStore_(APP_CONFIG.storeKey, normalized, APP_CONFIG.maxRecords);
@@ -2359,6 +2354,10 @@ function normalizeStoredDispatchRecord_(record) {
     updatedBy: normalizeEmail_(record.updatedBy),
     status: String(record.status || '有效').trim() || '有效'
   };
+}
+
+function isActiveStoredDispatchRecord_(record) {
+  return Boolean(record && record.status === '有效');
 }
 
 function getScriptJsonStore_(baseKey) {
