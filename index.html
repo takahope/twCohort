@@ -2006,7 +2006,8 @@
             </div>
             <div class="field">
               <label for="station-manager">駐站管理員</label>
-              <select id="station-manager" required></select>
+              <input id="station-manager" type="text" list="station-manager-options" autocomplete="off" placeholder="輸入姓名、信箱或關鍵字搜尋" required>
+              <datalist id="station-manager-options"></datalist>
             </div>
             <div class="status" id="station-status"></div>
           </div>
@@ -2265,6 +2266,7 @@
         'station-name',
         'station-alias',
         'station-manager',
+        'station-manager-options',
         'station-status',
         'station-save-btn',
         'pending-assignment-modal',
@@ -3392,13 +3394,14 @@
     }
 
     function renderStationManagerOptions() {
-      el.stationManager.innerHTML = [
-        `<option value="">${state.managerCandidates.length ? '選擇駐站管理員' : '沒有符合職稱的人選'}</option>`,
-        ...state.managerCandidates.map((person) => (
-          `<option value="${escapeHtml(person.email)}">${escapeHtml(formatManagerOptionLabel(person))}</option>`
-        ))
-      ].join('');
-      el.stationManager.disabled = !state.managerCandidates.length;
+      const candidates = Array.isArray(state.managerCandidates) ? state.managerCandidates : [];
+      el.stationManagerOptions.innerHTML = candidates.map((person) => (
+        `<option value="${escapeHtml(formatManagerOptionLabel(person))}" data-email="${escapeHtml(person.email || '')}"></option>`
+      )).join('');
+      el.stationManager.disabled = !candidates.length;
+      el.stationManager.placeholder = candidates.length
+        ? '輸入姓名、信箱或關鍵字搜尋'
+        : '沒有符合職稱的人選';
     }
 
     function formatManagerOptionLabel(person) {
@@ -3411,6 +3414,20 @@
         String(person && person.title || '').trim(),
         orgText
       ].filter(Boolean).join('｜');
+    }
+
+    function resolveStationManagerEmail(value) {
+      const rawValue = String(value || '').trim();
+      if (!rawValue) return '';
+
+      const rawValueLower = rawValue.toLowerCase();
+      const candidates = Array.isArray(state.managerCandidates) ? state.managerCandidates : [];
+      const matchedPerson = candidates.find((person) => {
+        const email = String(person && person.email || '').trim();
+        return formatManagerOptionLabel(person) === rawValue
+          || (email && email.toLowerCase() === rawValueLower);
+      });
+      return matchedPerson && matchedPerson.email ? matchedPerson.email : '';
     }
 
     function openStationModal() {
@@ -3466,12 +3483,19 @@
       event.preventDefault();
       if (state.isCreatingStation) return;
 
+      const managerEmail = resolveStationManagerEmail(el.stationManager.value);
+      if (!managerEmail) {
+        setStationStatus(el.stationManager.value ? '請從候選名單選擇駐站管理員。' : '請選擇駐站管理員。', 'error');
+        el.stationManager.focus();
+        return;
+      }
+
       const payload = {
         stationType: state.stationModalType,
         codeSuffix: normalizeStationSuffixInput(el.stationCodeSuffix.value, state.stationModalType === 'external'),
         name: el.stationName.value,
         alias: el.stationAlias.value,
-        managerEmail: el.stationManager.value,
+        managerEmail,
         isIsoCertified: false,
         testMode: state.testMode,
         filters: collectFilters()
