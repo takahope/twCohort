@@ -890,21 +890,94 @@ function getDispatchSourceSpreadsheet_() {
 function getDispatchSourceSpreadsheetId_() {
   const spreadsheetId = getEnvString_('DISPATCH_SOURCE_SHEET_ID', '');
   if (!spreadsheetId || spreadsheetId.indexOf('請填入') >= 0) {
-    throw new Error('尚未設定駐站護理師調派獨立資料 Spreadsheet ID（ENV.DISPATCH_SOURCE_SHEET_ID）。');
+    throw new Error('尚未設定駐站護理師調派獨立資料 Spreadsheet ID，請於 GAS 指令碼屬性 (Script Properties) 設定 DISPATCH_SOURCE_SHEET_ID。');
   }
 
   const chrmSpreadsheetId = getEnvString_('CHRM_MASTER_SHEET_ID', getEnvString_('MASTER_SHEET_ID', ''));
   if (chrmSpreadsheetId && spreadsheetId === chrmSpreadsheetId) {
-    throw new Error('駐站護理師調派 App 不可讀取 cHRM 正式資料表，請將 ENV.DISPATCH_SOURCE_SHEET_ID 改為獨立試算表 ID。');
+    throw new Error('駐站護理師調派 App 不可讀取 cHRM 正式資料表，請將指令碼屬性 (Script Properties) 的 DISPATCH_SOURCE_SHEET_ID 改為獨立試算表 ID。');
   }
 
   return spreadsheetId;
 }
 
+// 單次執行生命週期快取 Script Properties，避免 getEnvString_ 在大量讀表時反覆打 API（Issue #14）。
+var SCRIPT_PROPERTIES_CACHE_ = null;
+
+function getScriptPropertiesCache_() {
+  if (SCRIPT_PROPERTIES_CACHE_) return SCRIPT_PROPERTIES_CACHE_;
+  try {
+    SCRIPT_PROPERTIES_CACHE_ = PropertiesService.getScriptProperties().getProperties() || {};
+  } catch (error) {
+    // 本地或無權限環境取不到 Properties 時，降級為空物件並沿用 ENV fallback。
+    console.error('讀取 Script Properties 失敗:', error);
+    SCRIPT_PROPERTIES_CACHE_ = {};
+  }
+  return SCRIPT_PROPERTIES_CACHE_;
+}
+
+// 讀取優先序：Script Property → ENV[key] → fallback（Issue #14 混合模式）。
 function getEnvString_(key, fallback) {
-  if (typeof ENV === 'undefined' || !key || typeof ENV[key] === 'undefined') return fallback;
-  const value = String(ENV[key] || '').trim();
-  return value || fallback;
+  if (!key) return fallback;
+  const properties = getScriptPropertiesCache_();
+  if (properties && typeof properties[key] === 'string') {
+    const propValue = properties[key].trim();
+    if (propValue) return propValue;
+  }
+  if (typeof ENV !== 'undefined' && typeof ENV[key] !== 'undefined') {
+    const value = String(ENV[key] || '').trim();
+    if (value) return value;
+  }
+  return fallback;
+}
+
+function getEnvBoolean_(key, fallback) {
+  if (!key) return fallback;
+  const properties = getScriptPropertiesCache_();
+  if (properties && typeof properties[key] === 'string' && properties[key].trim()) {
+    return parseBooleanish_(properties[key], fallback);
+  }
+  if (typeof ENV !== 'undefined' && ENV[key] !== undefined && ENV[key] !== null && ENV[key] !== '') {
+    return parseBooleanish_(ENV[key], fallback);
+  }
+  return fallback;
+}
+
+function parseBooleanish_(value, fallback) {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y', '是', 'on'].indexOf(normalized) >= 0) return true;
+  if (['false', '0', 'no', 'n', '否', 'off'].indexOf(normalized) >= 0) return false;
+  return fallback;
+}
+
+function getEnvArray_(key, fallback) {
+  const defaults = Array.isArray(fallback) ? fallback : [];
+  if (!key) return defaults;
+  const properties = getScriptPropertiesCache_();
+  if (properties && typeof properties[key] === 'string' && properties[key].trim()) {
+    return parseArrayish_(properties[key], defaults);
+  }
+  if (typeof ENV !== 'undefined' && typeof ENV[key] !== 'undefined') {
+    return parseArrayish_(ENV[key], defaults);
+  }
+  return defaults;
+}
+
+// 同時容錯兩種來源：ENV 為真陣列、Script Properties 只能存字串（JSON 陣列或逗號／換行分隔）。
+function parseArrayish_(value, defaults) {
+  if (Array.isArray(value)) return value.slice();
+  const raw = String(value || '').trim();
+  if (!raw) return defaults;
+  if (raw.charAt(0) === '[') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (error) {
+      // JSON 解析失敗則落入下方分隔切分。
+    }
+  }
+  return raw.split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function getScriptCache_() {
@@ -1748,15 +1821,14 @@ function canUseTestMode_(viewerEmail, assignments) {
 }
 
 function getTesterEmails_() {
-  if (typeof ENV === 'undefined' || !Array.isArray(ENV.TESTER_EMAILS)) return [];
-  return ENV.TESTER_EMAILS.map((email) => normalizeEmail_(email)).filter(Boolean);
+  return getEnvArray_('TESTER_EMAILS', []).map((email) => normalizeEmail_(email)).filter(Boolean);
 }
 
 function getTesterTitles_() {
-  if (typeof ENV === 'undefined' || !Array.isArray(ENV.TESTER_TITLES)) {
-    return ['系統測試人員', '測試人員'];
-  }
-  return ENV.TESTER_TITLES.map((title) => String(title || '').trim()).filter(Boolean);
+  const titles = getEnvArray_('TESTER_TITLES', ['系統測試人員', '測試人員'])
+    .map((title) => String(title || '').trim())
+    .filter(Boolean);
+  return titles.length ? titles : ['系統測試人員', '測試人員'];
 }
 
 function buildStationManagerCandidates_(source) {
@@ -2640,7 +2712,8 @@ function buildLegacyDispatchRecordVersion_(record) {
 }
 
 function syncTemporaryDispatchColumn_(source, records, assignmentKeys, options) {
-  if (typeof ENV !== 'undefined' && ENV.SYNC_TEMPORARY_DISPATCH_COLUMN === false) return;
+  // 預設為同步（true），僅當明確設為 false 時跳過；支援 Script Properties 與 env.js 兩種來源（Issue #14）。
+  if (!getEnvBoolean_('SYNC_TEMPORARY_DISPATCH_COLUMN', true)) return;
   if (isTestDispatchRecordStore_(options)) return;
   if (!source || !source.assignmentSheet) return;
 
