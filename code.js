@@ -1994,6 +1994,7 @@ function buildDispatchContext_(source, viewerEmail, options) {
         code: station.code,
         name: station.name || station.code,
         isExternal: Boolean(station.isExternal),
+        isMobile: Boolean(station.isMobile),
         managerEmail: normalizeEmail_(station.managerEmail),
         managerName: station.managerName || '',
         memberCount: Number(station.memberCount || 0),

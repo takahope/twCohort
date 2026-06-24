@@ -3716,11 +3716,7 @@
     function getDeletableStations() {
       if (!(state.viewer && state.viewer.canCreateStation)) return [];
       return getOrderedStations()
-        .filter((station) => (
-          station
-          && station.isMobile
-          && station.code
-        ));
+        .filter((station) => station && station.code && isMobileStation(station));
     }
 
     function openDeleteStationModal() {
