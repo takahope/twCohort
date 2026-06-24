@@ -969,6 +969,22 @@
     .station-color-20 { background: #b45309; }
     .station-color-21 { background: #6d28d9; }
 
+    .station-color-swatch.is-mobile {
+      box-shadow:
+        inset 0 0 0 1px rgba(15, 23, 42, 0.22),
+        0 0 0 2px rgba(250, 250, 250, 0.9),
+        0 0 8px rgba(250, 204, 21, 0.45);
+    }
+
+    .station-color-mobile-0 { background: #faff00; }
+    .station-color-mobile-1 { background: #39ff14; }
+    .station-color-mobile-2 { background: #00f5ff; }
+    .station-color-mobile-3 { background: #38bdf8; }
+    .station-color-mobile-4 { background: #ff4ecd; }
+    .station-color-mobile-5 { background: #ff2e63; }
+    .station-color-mobile-6 { background: #ff9f1c; }
+    .station-color-mobile-7 { background: #b8ff3c; }
+
     .schedule-cell {
       vertical-align: top;
       background: #fff;
@@ -1439,6 +1455,16 @@
       box-shadow: var(--shadow);
     }
 
+    .station-modal.headcount-modal {
+      width: min(1180px, 100%);
+    }
+
+    .headcount-content {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
     .modal-header,
     .modal-footer {
       padding: 16px 18px;
@@ -1494,6 +1520,19 @@
 
     .code-preview.is-invalid {
       color: #c0392b;
+    }
+
+    .mobile-station-color-preview {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 900;
+    }
+
+    .mobile-station-color-preview .station-color-swatch {
+      margin-top: 0;
     }
 
     .loading-screen {
@@ -1876,66 +1915,6 @@
         <section class="panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title">駐站真實人數（依日期）</div>
-              <div class="muted">以選定日期解析各駐站真實人數（基底 − 當日調出 + 當日調入），並標示需要被調派的人員。</div>
-            </div>
-          </div>
-          <div class="panel-body">
-            <div class="records-query" id="headcount-toolbar">
-              <div class="field">
-                <label for="headcount-date">查詢日期</label>
-                <input id="headcount-date" type="date">
-              </div>
-              <div class="records-actions">
-                <button class="btn btn-primary" type="button" id="headcount-load-btn">查詢真實人數</button>
-              </div>
-            </div>
-            <div class="status" id="headcount-status"></div>
-            <div class="fairness-grid">
-              <div class="fairness-table-card">
-                <div class="fairness-table-header">
-                  <div class="fairness-table-title">各駐站真實人數</div>
-                  <div class="muted" id="headcount-station-count">0 筆</div>
-                </div>
-                <div class="fairness-table-wrap">
-                  <table class="fairness-station-table">
-                    <thead>
-                      <tr>
-                        <th>駐站</th>
-                        <th>基底</th>
-                        <th>調入</th>
-                        <th>調出</th>
-                        <th>真實人數</th>
-                      </tr>
-                    </thead>
-                    <tbody id="headcount-station-body"></tbody>
-                  </table>
-                </div>
-              </div>
-              <div class="fairness-table-card">
-                <div class="fairness-table-header">
-                  <div class="fairness-table-title">需要被調派</div>
-                  <div class="muted" id="needs-dispatch-count">0 筆</div>
-                </div>
-                <div class="fairness-table-wrap">
-                  <table class="fairness-nurse-table">
-                    <thead>
-                      <tr>
-                        <th>護理師</th>
-                        <th>基底駐站</th>
-                      </tr>
-                    </thead>
-                    <tbody id="needs-dispatch-body"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-header">
-            <div>
               <div class="panel-title">年度臨時徵調統計</div>
               <div class="muted">統計區間固定為年度 1/1 至 12/31，用於平衡駐站需求與護理師調度公平性。</div>
             </div>
@@ -2048,13 +2027,9 @@
         <form id="station-form">
           <div class="station-form">
             <div class="field">
-              <label for="station-code-suffix">英文尾碼</label>
-              <input id="station-code-suffix" type="text" maxlength="24" placeholder="例如 ABC" autocomplete="off" required>
-              <div class="code-preview" id="station-code-preview">完整代碼：GRP-CO-protable-</div>
-            </div>
-            <div class="field">
               <label for="station-name">駐站中文名稱</label>
               <input id="station-name" type="text" maxlength="80" placeholder="請輸入駐站名稱" required>
+              <div class="mobile-station-color-preview" id="station-color-preview"></div>
             </div>
             <div class="field">
               <label for="station-manager">駐站管理員</label>
@@ -2068,6 +2043,69 @@
             <button class="btn btn-primary" type="submit" id="station-save-btn">新增行動駐站</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div class="modal-overlay hidden" id="headcount-modal" role="dialog" aria-modal="true" aria-labelledby="headcount-modal-title">
+      <section class="station-modal headcount-modal">
+        <div class="modal-header">
+          <div>
+            <div class="panel-title" id="headcount-modal-title">駐站真實人數（依日期）</div>
+            <div class="muted">以選定日期解析各駐站真實人數（基底 - 當日調出 + 當日調入），並標示需要被調派的人員。</div>
+          </div>
+          <button class="btn btn-ghost" type="button" id="headcount-modal-close">關閉</button>
+        </div>
+        <div class="headcount-content">
+          <div class="records-query" id="headcount-toolbar">
+            <div class="field">
+              <label for="headcount-date">查詢日期</label>
+              <input id="headcount-date" type="date">
+            </div>
+            <div class="records-actions">
+              <button class="btn btn-primary" type="button" id="headcount-load-btn">查詢真實人數</button>
+            </div>
+          </div>
+          <div class="status" id="headcount-status"></div>
+          <div class="fairness-grid">
+            <div class="fairness-table-card">
+              <div class="fairness-table-header">
+                <div class="fairness-table-title">各駐站真實人數</div>
+                <div class="muted" id="headcount-station-count">0 筆</div>
+              </div>
+              <div class="fairness-table-wrap">
+                <table class="fairness-station-table">
+                  <thead>
+                    <tr>
+                      <th>駐站</th>
+                      <th>基底</th>
+                      <th>調入</th>
+                      <th>調出</th>
+                      <th>真實人數</th>
+                    </tr>
+                  </thead>
+                  <tbody id="headcount-station-body"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="fairness-table-card">
+              <div class="fairness-table-header">
+                <div class="fairness-table-title">需要被調派</div>
+                <div class="muted" id="needs-dispatch-count">0 筆</div>
+              </div>
+              <div class="fairness-table-wrap">
+                <table class="fairness-nurse-table">
+                  <thead>
+                    <tr>
+                      <th>護理師</th>
+                      <th>基底駐站</th>
+                    </tr>
+                  </thead>
+                  <tbody id="needs-dispatch-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
 
@@ -2176,6 +2214,8 @@
     const MOBILE_STATION_CODE_PREFIX = 'GRP-CO-protable-';
     const RECORDS_AUTO_REFRESH_MS = 45000;
     const STATION_COLOR_CLASS_COUNT = 22;
+    const MOBILE_STATION_COLOR_CLASS_COUNT = 8;
+    const MOBILE_STATION_COLOR_LABELS = ['螢光黃', '螢光綠', '螢光青', '亮藍', '螢光粉', '螢光桃紅', '螢光橘', '亮萊姆'];
     const MOVEMENT_TASK_TONE_COUNT = 8;
 
     // 北到南排序，月曆、駐站下拉與護理師清單共用。
@@ -2246,6 +2286,8 @@
         'filter-station',
         'filter-nurse',
         'record-count-display',
+        'headcount-modal',
+        'headcount-modal-close',
         'headcount-date',
         'headcount-load-btn',
         'headcount-status',
@@ -2321,8 +2363,7 @@
         'station-modal-description',
         'station-modal-close',
         'station-form',
-        'station-code-suffix',
-        'station-code-preview',
+        'station-color-preview',
         'station-name',
         'station-manager',
         'station-manager-options',
@@ -2467,12 +2508,15 @@
       el.stationModal.addEventListener('click', (event) => {
         if (event.target === el.stationModal) closeStationModal();
       });
+      el.headcountModalClose.addEventListener('click', closeHeadcountModal);
+      el.headcountModal.addEventListener('click', (event) => {
+        if (event.target === el.headcountModal) closeHeadcountModal();
+      });
       el.pendingAssignmentClose.addEventListener('click', closePendingAssignmentModal);
       el.pendingAssignmentModal.addEventListener('click', (event) => {
         if (event.target === el.pendingAssignmentModal) closePendingAssignmentModal();
       });
       el.pendingAssignmentSaveBtn.addEventListener('click', assignPendingRecord);
-      el.stationCodeSuffix.addEventListener('input', updateStationCodePreview);
       el.stationForm.addEventListener('submit', saveStation);
       // 追蹤表單修改狀態，供關閉攔截與分頁離開提示使用（Issue #9）。
       el.stationForm.addEventListener('input', markStationFormDirty);
@@ -2624,9 +2668,6 @@
       }
       if (el.headcountDate && !el.headcountDate.value) {
         el.headcountDate.value = getTodayString();
-      }
-      if (shouldLoadFairness) {
-        window.setTimeout(() => loadStationHeadcount(), 0);
       }
     }
 
@@ -3498,7 +3539,7 @@
     function openStationModal() {
       resetStationForm();
       el.stationModal.classList.remove('hidden');
-      el.stationCodeSuffix.focus();
+      el.stationName.focus();
     }
 
     function closeStationModal(force) {
@@ -3513,6 +3554,18 @@
       setStationStatus('');
     }
 
+    function openHeadcountModal() {
+      if (el.headcountDate && !el.headcountDate.value) {
+        el.headcountDate.value = getTodayString();
+      }
+      el.headcountModal.classList.remove('hidden');
+      loadStationHeadcount();
+    }
+
+    function closeHeadcountModal() {
+      el.headcountModal.classList.add('hidden');
+    }
+
     function markStationFormDirty() {
       state.isStationFormDirty = true;
     }
@@ -3520,51 +3573,26 @@
     function resetStationForm() {
       el.stationForm.reset();
       renderStationManagerOptions();
-      updateStationCodePreview();
+      updateStationColorPreview();
       setStationStatus('');
       // 重新開啟／重置表單時清除 dirty 狀態，避免沿用上一次的修改旗標（Issue #9）。
       state.isStationFormDirty = false;
     }
 
-    function updateStationCodePreview() {
-      const suffix = normalizeMobileStationSuffixInput(el.stationCodeSuffix.value);
-      const prefix = MOBILE_STATION_CODE_PREFIX;
-      // 即時防呆：輸入當下就檢核尾碼格式並以紅字提示，不必等送出後才由後端報錯（Issue #10）。
-      const suffixError = validateMobileStationSuffix(suffix);
-      el.stationCodePreview.classList.toggle('is-invalid', Boolean(suffixError));
-      el.stationCodePreview.textContent = suffixError
-        ? `完整代碼：${prefix}${suffix}（${suffixError}）`
-        : `完整代碼：${prefix}${suffix}`;
-    }
-
-    function validateMobileStationSuffix(suffix) {
-      if (!suffix) return '請輸入英文尾碼';
-      if (!/^[A-Z0-9][A-Z0-9-]{0,23}$/.test(suffix)) {
-        return '僅能使用大寫英文、數字與連字號，最多 24 碼';
-      }
-      return '';
-    }
-
-    function normalizeMobileStationSuffixInput(value) {
-      return String(value || '')
-        .trim()
-        .toUpperCase()
-        .replace(new RegExp(`^${escapeRegExp(MOBILE_STATION_CODE_PREFIX.toUpperCase())}`), '')
-        .replace(new RegExp(`^${escapeRegExp(STATION_CODE_PREFIX)}`), '');
+    function updateStationColorPreview() {
+      const colorKey = getNextMobileStationPreviewColorKey();
+      const colorIndex = getMobileStationColorIndexFromKey(colorKey);
+      const label = MOBILE_STATION_COLOR_LABELS[colorIndex] || '螢光色';
+      el.stationColorPreview.innerHTML = `
+        <span class="station-color-swatch station-color-${escapeHtml(colorKey)} is-mobile" aria-hidden="true"></span>
+        <span>新增後系統會自動分配 ${escapeHtml(label)} 標注。</span>
+      `;
     }
 
     async function saveStation(event) {
       event.preventDefault();
       if (state.isCreatingStation) return;
 
-      // 送出前先做基本防呆，把錯誤擋在輸入階段而非提交後（Issue #10）。
-      const codeSuffix = normalizeMobileStationSuffixInput(el.stationCodeSuffix.value);
-      const suffixError = validateMobileStationSuffix(codeSuffix);
-      if (suffixError) {
-        setStationStatus(`${suffixError}。`, 'error');
-        el.stationCodeSuffix.focus();
-        return;
-      }
       if (!el.stationName.value.trim()) {
         setStationStatus('請輸入駐站中文名稱。', 'error');
         el.stationName.focus();
@@ -3579,7 +3607,6 @@
       }
 
       const payload = {
-        codeSuffix,
         name: el.stationName.value,
         managerEmail,
         testMode: state.testMode,
@@ -4574,11 +4601,79 @@
     }
 
     function buildStationColorSwatchHtml(stationOrCode) {
-      return `<span class="station-color-swatch ${getStationColorClass(stationOrCode)}" aria-hidden="true"></span>`;
+      return `<span class="station-color-swatch ${getStationColorClass(stationOrCode)}${isMobileStation(stationOrCode) ? ' is-mobile' : ''}" aria-hidden="true"></span>`;
     }
 
     function getStationColorClass(stationOrCode) {
+      if (isMobileStation(stationOrCode)) {
+        return `station-color-${getMobileStationColorKey(stationOrCode)}`;
+      }
       return `station-color-${getStationColorIndex(stationOrCode)}`;
+    }
+
+    function isMobileStation(stationOrCode) {
+      const station = typeof stationOrCode === 'string'
+        ? getStationByCode(stationOrCode)
+        : stationOrCode;
+      const stationCode = String(
+        typeof stationOrCode === 'string'
+          ? stationOrCode
+          : (stationOrCode && stationOrCode.code || '')
+      ).trim().toUpperCase();
+      return Boolean(station && station.isMobile)
+        || (stationCode && stationCode.indexOf(MOBILE_STATION_CODE_PREFIX.toUpperCase()) === 0);
+    }
+
+    function getMobileStationColorKey(stationOrCode) {
+      const station = typeof stationOrCode === 'string'
+        ? getStationByCode(stationOrCode)
+        : stationOrCode;
+      const savedKey = normalizeMobileStationColorKey(station && station.colorKey);
+      if (savedKey) return savedKey;
+      const stationCode = String(
+        typeof stationOrCode === 'string'
+          ? stationOrCode
+          : (stationOrCode && stationOrCode.code || '')
+      ).trim();
+      return `mobile-${hashText(stationCode || (station && station.name) || '') % MOBILE_STATION_COLOR_CLASS_COUNT}`;
+    }
+
+    function normalizeMobileStationColorKey(value) {
+      const key = String(value || '').trim().toLowerCase().replace(/^station-color-/, '');
+      const match = key.match(/^mobile-(\d+)$/);
+      if (!match) return '';
+      const index = Number(match[1]);
+      if (!Number.isInteger(index) || index < 0 || index >= MOBILE_STATION_COLOR_CLASS_COUNT) return '';
+      return `mobile-${index}`;
+    }
+
+    function getMobileStationColorIndexFromKey(value) {
+      const key = normalizeMobileStationColorKey(value);
+      const index = Number(String(key).replace('mobile-', ''));
+      return Number.isInteger(index) ? index : 0;
+    }
+
+    function getNextMobileStationPreviewColorKey() {
+      const counts = new Map();
+      for (let index = 0; index < MOBILE_STATION_COLOR_CLASS_COUNT; index += 1) {
+        counts.set(`mobile-${index}`, 0);
+      }
+      (Array.isArray(state.stations) ? state.stations : [])
+        .filter((station) => isMobileStation(station))
+        .forEach((station) => {
+          const key = getMobileStationColorKey(station);
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+
+      let selectedKey = 'mobile-0';
+      let selectedCount = Number.POSITIVE_INFINITY;
+      counts.forEach((count, key) => {
+        if (count < selectedCount) {
+          selectedKey = key;
+          selectedCount = count;
+        }
+      });
+      return selectedKey;
     }
 
     function getStationColorIndex(stationOrCode) {

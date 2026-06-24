@@ -53,9 +53,11 @@ const APP_CONFIG = {
 let officialHolidayDatasetRowsCache_ = null;
 
 const DISPATCH_ANNUAL_STORE_HEADERS_ = ['年度', '資料ID', '資料JSON', '更新時間'];
+const MOBILE_STATION_COLOR_KEY_PREFIX_ = 'mobile-';
+const MOBILE_STATION_COLOR_COUNT_ = 8;
 
-// 行動駐站工作表表頭（A-G，以 F/G 軟刪除）。
-const MOBILE_STATION_SHEET_HEADERS_ = ['行動駐站代號', '駐站中文名稱', '駐站管理員email', '新增日期', '新增人員', '刪除日期', '刪除人員'];
+// 行動駐站工作表表頭（A-H，以 F/G 軟刪除，H 欄供前端色標辨識）。
+const MOBILE_STATION_SHEET_HEADERS_ = ['行動駐站代號', '駐站中文名稱', '駐站管理員email', '新增日期', '新增人員', '刪除日期', '刪除人員', '標注顏色'];
 
 // 駐站調配工作表表頭（以「資料ID」= assignmentKey 為主鍵 upsert，取代原本寫回人員職務配置的「臨時調配」欄）。
 const STATION_ALLOCATION_SHEET_HEADERS_ = ['資料ID', '信箱', '姓名', '基底駐站代號', '臨調摘要', '更新時間'];
@@ -879,6 +881,8 @@ function createMobileStation(payload) {
     response.createdStation = {
       code: normalized.code,
       name: normalized.name,
+      colorKey: normalized.colorKey,
+      isMobile: true,
       isExternal: false
     };
     return response;
@@ -1777,9 +1781,10 @@ function normalizeTestStationRecord_(station) {
   const managerEmail = normalizeEmail_(station.managerEmail);
   if (!code || !managerEmail) return null;
   const isExternal = Boolean(station.isExternal || isExternalStationCodeOrType_(code, station.type || station.typeLabel));
+  const isMobile = Boolean(station.isMobile || isMobileStationCode_(code));
   return {
     rowIndex: 0,
-    type: String(station.type || station.typeLabel || (isExternal ? '委外駐站' : '一般駐站')).trim(),
+    type: String(station.type || station.typeLabel || (isMobile ? '行動駐站' : (isExternal ? '委外駐站' : '一般駐站'))).trim(),
     level: Number(station.level || getEnvString_('DISPATCH_STATION_LEVEL', '3')),
     code,
     name: String(station.name || station.alias || code).trim(),
@@ -1788,7 +1793,9 @@ function normalizeTestStationRecord_(station) {
     managerEmail,
     managerName: String(station.managerName || managerEmail).trim(),
     isIsoCertified: Boolean(station.isIsoCertified),
-    isExternal
+    isExternal,
+    isMobile,
+    colorKey: isMobile ? (normalizeMobileStationColorKey_(station.colorKey) || buildMobileStationColorKey_(code)) : ''
   };
 }
 
@@ -2131,6 +2138,56 @@ function normalizeStationCodeSuffix_(value, isExternal) {
 
 // ── 行動駐站 helpers ───────────────────────────────────────────────────────────
 
+function isMobileStationCode_(value) {
+  const code = String(value || '').trim().toUpperCase();
+  return Boolean(code && code.indexOf(APP_CONFIG.mobileStationCodePrefix.toUpperCase()) === 0);
+}
+
+function normalizeMobileStationColorKey_(value) {
+  const key = String(value || '').trim().toLowerCase().replace(/^station-color-/, '');
+  const match = key.match(/^mobile-(\d+)$/);
+  if (!match) return '';
+  const index = Number(match[1]);
+  if (!Number.isInteger(index) || index < 0 || index >= MOBILE_STATION_COLOR_COUNT_) return '';
+  return `${MOBILE_STATION_COLOR_KEY_PREFIX_}${index}`;
+}
+
+function buildMobileStationColorKey_(value) {
+  return `${MOBILE_STATION_COLOR_KEY_PREFIX_}${stableTextHash_(value) % MOBILE_STATION_COLOR_COUNT_}`;
+}
+
+function getNextMobileStationColorKey_(source, stationCode) {
+  const counts = new Map();
+  for (let index = 0; index < MOBILE_STATION_COLOR_COUNT_; index += 1) {
+    counts.set(`${MOBILE_STATION_COLOR_KEY_PREFIX_}${index}`, 0);
+  }
+  (Array.isArray(source && source.stations) ? source.stations : [])
+    .filter((station) => station && (station.isMobile || isMobileStationCode_(station.code)))
+    .forEach((station) => {
+      const key = normalizeMobileStationColorKey_(station.colorKey) || buildMobileStationColorKey_(station.code || station.name);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+
+  let selectedKey = `${MOBILE_STATION_COLOR_KEY_PREFIX_}0`;
+  let selectedCount = Number.POSITIVE_INFINITY;
+  counts.forEach((count, key) => {
+    if (count < selectedCount) {
+      selectedKey = key;
+      selectedCount = count;
+    }
+  });
+  return selectedKey || buildMobileStationColorKey_(stationCode);
+}
+
+function stableTextHash_(value) {
+  let hash = 0;
+  String(value || '').split('').forEach((char) => {
+    hash = ((hash << 5) - hash) + char.charCodeAt(0);
+    hash |= 0;
+  });
+  return Math.abs(hash);
+}
+
 function normalizeMobileStationCodeSuffix_(value) {
   let suffix = String(value || '').trim().toUpperCase();
   // 先剝較長的 protable 前綴，再剝一般前綴，避免使用者貼入完整代號時殘留。
@@ -2146,12 +2203,30 @@ function normalizeMobileStationCodeSuffix_(value) {
   return suffix;
 }
 
+function generateMobileStationCodeSuffix_(source) {
+  const existingCodes = new Set((Array.isArray(source && source.stations) ? source.stations : [])
+    .map((station) => normalizeOrgCode_(station && station.code))
+    .filter(Boolean));
+  for (let index = 1; index <= 9999; index += 1) {
+    const suffix = `M${String(index).padStart(3, '0')}`;
+    const code = normalizeOrgCode_(`${APP_CONFIG.mobileStationCodePrefix}${suffix}`);
+    if (!existingCodes.has(code)) return suffix;
+  }
+  const fallbackSuffix = `M${Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMddHHmmss')}`;
+  const fallbackCode = normalizeOrgCode_(`${APP_CONFIG.mobileStationCodePrefix}${fallbackSuffix}`);
+  if (!existingCodes.has(fallbackCode)) return fallbackSuffix;
+  throw new Error('目前無法產生新的行動駐站代碼，請稍後再試。');
+}
+
 function normalizeCreateMobileStationPayload_(payload, source) {
   if (!payload || typeof payload !== 'object') {
     throw new Error('新增行動駐站資料格式錯誤。');
   }
 
-  const suffix = normalizeMobileStationCodeSuffix_(payload.codeSuffix);
+  const requestedSuffix = String(payload.codeSuffix || '').trim();
+  const suffix = requestedSuffix
+    ? normalizeMobileStationCodeSuffix_(requestedSuffix)
+    : generateMobileStationCodeSuffix_(source);
   const displayCode = `${APP_CONFIG.mobileStationCodePrefix}${suffix}`; // 工作表 A 欄：保留 protable 顯示
   const code = normalizeOrgCode_(displayCode);                          // App 內比對一律大寫
 
@@ -2172,6 +2247,7 @@ function normalizeCreateMobileStationPayload_(payload, source) {
   if (!manager) {
     throw new Error('找不到職稱為「駐站管理員」的人選，請先確認人員職務配置表。');
   }
+  const colorKey = getNextMobileStationColorKey_(source, code);
 
   return {
     code,
@@ -2181,11 +2257,13 @@ function normalizeCreateMobileStationPayload_(payload, source) {
     managerEmail,
     managerName: manager.name || manager.email,
     isExternal: false,
+    isMobile: true,
+    colorKey,
     isIsoCertified: false
   };
 }
 
-// 讀「行動駐站」工作表 A-G，過濾已軟刪除（F 欄刪除日期非空）者。回傳 in-app 用的 station 雛形。
+// 讀「行動駐站」工作表 A-H，過濾已軟刪除（F 欄刪除日期非空）者。回傳 in-app 用的 station 雛形。
 function readMobileStationRecords_() {
   const sheet = getMobileStationSheet_(false);
   if (!sheet) return [];
@@ -2199,7 +2277,8 @@ function readMobileStationRecords_() {
         rawCode,
         name: String(row[1] || '').trim(),
         managerEmail: normalizeEmail_(row[2] || ''),
-        deletedAt: String(row[5] || '').trim()
+        deletedAt: String(row[5] || '').trim(),
+        colorKey: normalizeMobileStationColorKey_(row[7])
       };
     })
     .filter((station) => station.code && !station.deletedAt);
@@ -2229,7 +2308,8 @@ function applyMobileStationOverrides_(source) {
       managerName: resolveDisplayNameByEmail_(source, mobile.managerEmail) || mobile.managerEmail,
       isIsoCertified: false,
       isExternal: false,
-      isMobile: true
+      isMobile: true,
+      colorKey: mobile.colorKey || buildMobileStationColorKey_(mobile.code)
     };
     stationByCode.set(mobile.code, station);
     assignments.push(createTestStationManagerAssignment_(station));
@@ -2265,6 +2345,7 @@ function appendMobileStationRecord_(sheet, station, viewerEmail) {
   row[3] = getTodayDateString_();               // D 新增日期
   row[4] = normalizeEmail_(viewerEmail);        // E 新增人員
   // F 刪除日期 / G 刪除人員：留空，軟刪除時才填。
+  row[7] = station.colorKey || buildMobileStationColorKey_(station.code); // H 標注顏色
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
   SpreadsheetApp.flush();
 }
