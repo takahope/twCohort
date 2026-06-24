@@ -33,6 +33,9 @@ const APP_CONFIG = {
   holidayCacheSeconds: 43200,
   holidayRefreshHour: 5,
   holidayRefreshLookAheadYears: 2,
+  scriptPropertiesWarningBytes: 400 * 1024,
+  scriptPropertiesBlockingBytes: 450 * 1024,
+  scriptPropertyValueWarningBytes: 8500,
   writeLockWaitMs: 30000,
   chunkSize: 8000,
   maxRecords: 3000,
@@ -44,6 +47,7 @@ const APP_CONFIG = {
   maxHoursPerRecord: 24,
   pendingAssignmentStatus: '待指派',
   pendingDispatchNurseName: '待指派',
+  pendingFairnessNurseName: '待確認',
   fullShiftBreakHours: 1,
   fullShiftBreakThresholdHours: 8,
   unavailableStatusKeywords: ['育嬰', '留停', '留職停薪', '停薪', '留職', '停職', '休職'],
@@ -226,7 +230,9 @@ function getDispatchAppData(payload) {
     ensureOfficialHolidayRefreshTrigger_();
 
     const filters = normalizeDispatchFilters_(payload);
-    const source = loadDispatchSource_();
+    const source = loadDispatchSource_({
+      forceFresh: Boolean(payload && payload.forceFresh)
+    });
     const context = buildDispatchContext_(source, viewerEmail, {
       testMode: Boolean(payload && payload.testMode)
     });
@@ -330,9 +336,10 @@ function getDispatchFairnessStats(payload) {
       assignmentAvailabilityByKey
     })
       .filter((record) => isTemporaryDispatchRecord_(record))
-      .filter((record) => !isPendingAssignmentRecord_(record))
-      .filter((record) => isCountableDispatchRecord_(record, baseStationsByEmail))
-      .filter((record) => !filters.stationCode || record.stationCode === filters.stationCode || record.originalStationCode === filters.stationCode);
+      .filter((record) => isPendingAssignmentRecord_(record) || isCountableDispatchRecord_(record, baseStationsByEmail))
+      .filter((record) => !filters.stationCode || record.stationCode === filters.stationCode || record.originalStationCode === filters.stationCode)
+      .map(normalizeFairnessDispatchRecord_)
+      .filter(Boolean);
 
     return {
       success: true,
@@ -377,6 +384,66 @@ function getStationHeadcountByDate(payload) {
       message: error && error.message ? error.message : '無法讀取駐站真實人數。'
     };
   }
+}
+
+function getDispatchStorageHealth(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    const context = buildDispatchStorageAdminContext_(payload, viewerEmail);
+    return {
+      success: true,
+      checkedAt: formatTimestamp_(new Date()),
+      viewer: {
+        email: context.viewer.email,
+        name: context.viewer.name || '',
+        testMode: Boolean(context.viewer.testMode),
+        canCreateStation: Boolean(context.viewer.canCreateStation)
+      },
+      ...buildDispatchStorageHealth_()
+    };
+  } catch (error) {
+    console.error('讀取調派儲存健康狀態失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法讀取調派儲存健康狀態。'
+    };
+  }
+}
+
+function runDispatchStorageMaintenance(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    buildDispatchStorageAdminContext_(payload, viewerEmail);
+    [
+      getDispatchRecordStoreKeys_({ testMode: false }),
+      getDispatchRecordStoreKeys_({ testMode: true })
+    ].forEach((store) => {
+      migrateLegacyDispatchRecordsToAnnualSheets_(store);
+      migrateLegacyDispatchAuditLogsToAnnualSheets_(store);
+    });
+    invalidateDispatchRecordsCache_();
+    return getDispatchStorageHealth(payload);
+  } catch (error) {
+    console.error('執行調派儲存維護失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法執行調派儲存維護。'
+    };
+  }
+}
+
+function buildDispatchStorageAdminContext_(payload, viewerEmail) {
+  if (!viewerEmail) {
+    throw new Error('無法辨識目前登入帳號。');
+  }
+  const source = loadDispatchSource_();
+  const context = buildDispatchContext_(source, viewerEmail, {
+    testMode: Boolean(payload && payload.testMode)
+  });
+  assertCanCreateStation_(context);
+  return context;
 }
 
 // 真實人數解析：與前端 getStationCountAtDate 同演算法（baseCount − 調出 + 調入，by assignmentKey 去重），後端為單一真相。
@@ -868,12 +935,22 @@ function createMobileStation(payload) {
     assertCanCreateStation_(context);
     const effectiveSource = context.viewer.testMode ? applyTestStationOverrides_(source) : source;
     const normalized = normalizeCreateMobileStationPayload_(payload, effectiveSource);
+    const now = formatTimestamp_(new Date());
     if (context.viewer.testMode) {
       createTestStationRecord_(source, normalized);
     } else {
       appendMobileStationRecord_(getMobileStationSheet_(true), normalized, viewerEmail);
       invalidateDispatchSourceCache_();
     }
+    appendDispatchAuditLogs_([
+      buildStationLifecycleAuditLog_('create-station', normalized, {
+        context,
+        source,
+        viewerEmail,
+        occurredAt: now,
+        note: '新增駐站；系統保留新增日期與新增人員。'
+      })
+    ], context);
     lock.releaseLock();
     hasLock = false;
 
@@ -897,7 +974,7 @@ function createMobileStation(payload) {
   }
 }
 
-// 刪除行動駐站：以軟刪除（寫入刪除日期/人員，保留列）方式停用，前端入口已移除，保留供後端／管理使用。
+// 刪除行動駐站：以軟刪除（寫入刪除日期/人員，保留列）方式停用。
 function deleteMobileStation(payload) {
   const viewerEmail = normalizeEmail_(getCurrentUserEmail());
   const lock = LockService.getScriptLock();
@@ -920,19 +997,38 @@ function deleteMobileStation(payload) {
       throw new Error('請選擇要刪除的行動駐站。');
     }
     const effectiveSource = context.viewer.testMode ? applyTestStationOverrides_(source) : source;
-    assertCanAdministrateStation_(context, stationCode);
+    assertCanDeleteMobileStation_(context);
     assertCanDeleteStation_(effectiveSource, stationCode, context);
+    const station = (Array.isArray(effectiveSource.stations) ? effectiveSource.stations : [])
+      .find((item) => item && normalizeOrgCode_(item.code) === stationCode) || { code: stationCode, name: stationCode };
+    const now = formatTimestamp_(new Date());
+    const pendingDeletion = buildPendingStationDemandDeletion_(stationCode, source, context, viewerEmail, now);
     if (context.viewer.testMode) {
       deleteTestStationRecord_(source, stationCode);
     } else {
       softDeleteMobileStationRecord_(getMobileStationSheet_(true), stationCode, viewerEmail);
       invalidateDispatchSourceCache_();
     }
+    if (pendingDeletion.nextRecords) {
+      saveStoredDispatchRecords_(pendingDeletion.nextRecords, context);
+    }
+    appendDispatchAuditLogs_([
+      buildStationLifecycleAuditLog_('delete-station', station, {
+        context,
+        source,
+        viewerEmail,
+        occurredAt: now,
+        note: pendingDeletion.count
+          ? `刪除駐站；系統保留原列，並同步取消 ${pendingDeletion.count} 筆待指派需求。`
+          : '刪除駐站；系統以軟刪除保留原列，並記錄刪除日期與刪除人員。'
+      })
+    ].concat(pendingDeletion.logs), context);
     lock.releaseLock();
     hasLock = false;
 
     const response = getDispatchAppData(buildDispatchRefreshPayload_(payload, context));
     response.deletedStationCode = stationCode;
+    response.deletedPendingDemandCount = pendingDeletion.count;
     return response;
   } catch (error) {
     console.error('刪除行動駐站失敗:', error);
@@ -1065,6 +1161,10 @@ function getScriptPropertiesCache_() {
     SCRIPT_PROPERTIES_CACHE_ = {};
   }
   return SCRIPT_PROPERTIES_CACHE_;
+}
+
+function invalidateScriptPropertiesCache_() {
+  SCRIPT_PROPERTIES_CACHE_ = null;
 }
 
 // 讀取優先序：Script Property → ENV[key] → fallback（Issue #14 混合模式）。
@@ -2049,6 +2149,13 @@ function assertCanAdministrateStation_(context, stationCode) {
   }
 }
 
+function assertCanDeleteMobileStation_(context) {
+  const canDelete = Boolean(context && context.viewer && context.viewer.canCreateStation);
+  if (!canDelete) {
+    throw new Error('您沒有刪除系統新增駐站的權限。');
+  }
+}
+
 function assertCanManageRelatedStation_(context, stationCode, originalStationCode, actionLabel) {
   const normalizedStationCode = normalizeOrgCode_(stationCode);
   const normalizedOriginalStationCode = normalizeOrgCode_(originalStationCode);
@@ -2207,6 +2314,7 @@ function generateMobileStationCodeSuffix_(source) {
   const existingCodes = new Set((Array.isArray(source && source.stations) ? source.stations : [])
     .map((station) => normalizeOrgCode_(station && station.code))
     .filter(Boolean));
+  readAllMobileStationCodes_().forEach((code) => existingCodes.add(code));
   for (let index = 1; index <= 9999; index += 1) {
     const suffix = `M${String(index).padStart(3, '0')}`;
     const code = normalizeOrgCode_(`${APP_CONFIG.mobileStationCodePrefix}${suffix}`);
@@ -2261,6 +2369,16 @@ function normalizeCreateMobileStationPayload_(payload, source) {
     colorKey,
     isIsoCertified: false
   };
+}
+
+function readAllMobileStationCodes_() {
+  const sheet = getMobileStationSheet_(false);
+  if (!sheet) return [];
+  const values = sheet.getDataRange().getDisplayValues();
+  if (values.length < 2) return [];
+  return values.slice(1)
+    .map((row) => normalizeOrgCode_(row[0]))
+    .filter(Boolean);
 }
 
 // 讀「行動駐站」工作表 A-H，過濾已軟刪除（F 欄刪除日期非空）者。回傳 in-app 用的 station 雛形。
@@ -2356,14 +2474,19 @@ function softDeleteMobileStationRecord_(sheet, stationCode, viewerEmail) {
   }
   const normalizedCode = normalizeOrgCode_(stationCode);
   const values = sheet.getDataRange().getDisplayValues();
+  let hasDeletedRow = false;
   for (let i = 1; i < values.length; i++) {
     if (normalizeOrgCode_(values[i][0]) !== normalizedCode) continue;
     if (String(values[i][5] || '').trim()) {
-      throw new Error('此行動駐站已被刪除。');
+      hasDeletedRow = true;
+      continue;
     }
     sheet.getRange(i + 1, 6, 1, 2).setValues([[getTodayDateString_(), normalizeEmail_(viewerEmail)]]); // F/G
     SpreadsheetApp.flush();
     return;
+  }
+  if (hasDeletedRow) {
+    throw new Error('此行動駐站已被刪除。');
   }
   throw new Error('找不到對應的行動駐站，無法刪除（僅行動駐站可由此刪除）。');
 }
@@ -2393,8 +2516,9 @@ function assertCanDeleteStation_(source, stationCode, options) {
       record.status === '有效'
       && (record.stationCode === normalizedStationCode || record.originalStationCode === normalizedStationCode)
     ));
-  if (activeRecords.length) {
-    throw new Error('此駐站已有有效調派紀錄，請先刪除或調整相關工時調派後再刪除駐站。');
+  const assignedRecords = activeRecords.filter((record) => !isPendingAssignmentRecord_(record));
+  if (assignedRecords.length) {
+    throw new Error(`此駐站已有 ${assignedRecords.length} 筆已指派調派紀錄，請先刪除或調整相關工時調派後再刪除駐站。待指派需求可由系統在刪除駐站時自動取消。`);
   }
 
   const nurseAssignments = (source && Array.isArray(source.assignments) ? source.assignments : [])
@@ -2405,6 +2529,42 @@ function assertCanDeleteStation_(source, stationCode, options) {
   if (nurseAssignments.length) {
     throw new Error('此駐站仍有人員配置，不可直接刪除。請先移除人員職務配置。');
   }
+}
+
+function buildPendingStationDemandDeletion_(stationCode, source, context, viewerEmail, occurredAt) {
+  const normalizedStationCode = normalizeOrgCode_(stationCode);
+  const records = getStoredDispatchRecords_(context);
+  const pendingRecords = [];
+  const nextRecords = [];
+
+  records.forEach((record) => {
+    const involvesStation = record
+      && record.status === '有效'
+      && (record.stationCode === normalizedStationCode || record.originalStationCode === normalizedStationCode);
+    if (involvesStation && isPendingAssignmentRecord_(record)) {
+      pendingRecords.push(record);
+      return;
+    }
+    nextRecords.push(record);
+  });
+
+  if (!pendingRecords.length) {
+    return { count: 0, nextRecords: null, logs: [] };
+  }
+
+  return {
+    count: pendingRecords.length,
+    nextRecords,
+    logs: pendingRecords.map((record) => buildDispatchAuditLog_('delete-pending', {
+      ...record,
+      note: '刪除駐站同步取消待指派需求'
+    }, {
+      context,
+      source,
+      viewerEmail,
+      occurredAt
+    }))
+  };
 }
 
 function deleteStationOrgRows_(sheet, stationCode) {
@@ -2884,6 +3044,20 @@ function assertTemporaryDispatchCooldown_(target, records) {
   ].filter(Boolean).join('\n'));
 }
 
+function normalizeFairnessDispatchRecord_(record) {
+  const normalized = normalizeStoredDispatchRecord_(record);
+  if (!normalized) return null;
+  if (!isPendingAssignmentRecord_(normalized)) return normalized;
+
+  return {
+    ...normalized,
+    assignmentKey: `pending-confirmation:${normalized.id}`,
+    nurseEmail: '',
+    nurseName: APP_CONFIG.pendingFairnessNurseName,
+    nurseTitle: ''
+  };
+}
+
 function buildFairnessStationStats_(records, stations) {
   const stationMap = new Map();
   (Array.isArray(stations) ? stations : []).forEach((station) => {
@@ -2966,6 +3140,7 @@ function getFairnessStationStat_(stationMap, stationCode, stationName) {
 function buildFairnessNurseStats_(records) {
   const nurseMap = new Map();
   normalizeActiveStoredDispatchRecords_(records).forEach((record) => {
+    const isPendingConfirmation = isPendingAssignmentRecord_(record);
     const key = record.assignmentKey || record.nurseEmail || record.nurseName;
     if (!key) return;
     if (!nurseMap.has(key)) {
@@ -2975,6 +3150,7 @@ function buildFairnessNurseStats_(records) {
         nurseEmail: record.nurseEmail || '',
         originalStationCode: record.originalStationCode || '',
         originalStationName: record.originalStationName || '',
+        isPendingConfirmation,
         dispatchCount: 0,
         dispatchDays: 0,
         dispatchHours: 0,
@@ -2999,12 +3175,15 @@ function buildFairnessNurseStats_(records) {
       nurseEmail: stat.nurseEmail,
       originalStationCode: stat.originalStationCode,
       originalStationName: stat.originalStationName,
+      isPendingConfirmation: Boolean(stat.isPendingConfirmation),
       dispatchCount: stat.dispatchCount,
       dispatchDays: stat.dispatchDays,
       dispatchHours: Math.round(stat.dispatchHours * 100) / 100,
       targetStationSummary: Array.from(stat.targetStationNames).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hant')).join('、'),
       latestEndDate: stat.latestEndDate,
-      nextAllowedDate: stat.latestEndDate ? addDays_(stat.latestEndDate, APP_CONFIG.temporaryDispatchCooldownDays) : ''
+      nextAllowedDate: stat.isPendingConfirmation || !stat.latestEndDate
+        ? ''
+        : addDays_(stat.latestEndDate, APP_CONFIG.temporaryDispatchCooldownDays)
     }))
     .sort((a, b) => {
       const countCompare = Number(b.dispatchCount || 0) - Number(a.dispatchCount || 0);
@@ -3350,7 +3529,12 @@ function getDispatchAuditLogs_(allowedStationCodes, filters, options) {
       if (allowedStationCodes) {
         const allowedTarget = allowedStationCodes.has(log.stationCode);
         const allowedOriginal = allowedStationCodes.has(log.originalStationCode);
-        if (!allowedTarget && !allowedOriginal) return false;
+        const isStationLifecycleLog = log.action === 'create-station' || log.action === 'delete-station';
+        const canViewStationLifecycleLog = isStationLifecycleLog
+          && options
+          && options.viewer
+          && options.viewer.canCreateStation;
+        if (!allowedTarget && !allowedOriginal && !canViewStationLifecycleLog) return false;
       }
       if (normalizedFilters.stationCode && log.stationCode !== normalizedFilters.stationCode && log.originalStationCode !== normalizedFilters.stationCode) return false;
       if (normalizedFilters.nurseEmail && normalizeEmail_(log.nurseEmail) !== normalizedFilters.nurseEmail) return false;
@@ -3384,9 +3568,175 @@ function isTestDispatchRecordStore_(options) {
   return Boolean(options.testMode);
 }
 
+function buildDispatchStorageHealth_() {
+  const scriptProperties = buildScriptPropertiesUsageSummary_();
+  const dispatchStores = [
+    buildDispatchStoreStorageSummary_('正式調派資料', false),
+    buildDispatchStoreStorageSummary_('測試調派資料', true)
+  ];
+  const legacyScriptJsonStores = [
+    buildScriptJsonStoreSummary_(APP_CONFIG.storeKey, '舊正式調派紀錄'),
+    buildScriptJsonStoreSummary_(APP_CONFIG.auditLogStoreKey, '舊正式操作紀錄'),
+    buildScriptJsonStoreSummary_(APP_CONFIG.testStoreKey, '舊測試調派紀錄'),
+    buildScriptJsonStoreSummary_(APP_CONFIG.testAuditLogStoreKey, '舊測試操作紀錄'),
+    buildScriptJsonStoreSummary_(APP_CONFIG.testStationsStoreKey, '測試新增駐站'),
+    buildScriptJsonStoreSummary_(APP_CONFIG.testHiddenStationCodesStoreKey, '測試隱藏駐站')
+  ];
+  const warnings = [];
+
+  if (scriptProperties.totalBytes >= APP_CONFIG.scriptPropertiesBlockingBytes) {
+    warnings.push('Script Properties 已超過阻擋門檻，請先清理非必要 properties 或執行資料遷移。');
+  } else if (scriptProperties.totalBytes >= APP_CONFIG.scriptPropertiesWarningBytes) {
+    warnings.push('Script Properties 已接近容量上限，請避免再把長期資料寫入 properties。');
+  }
+  legacyScriptJsonStores.forEach((store) => {
+    if (store.hasData && !store.parseOk) {
+      warnings.push(`${store.label} chunks 不完整或無法解析，系統已保留原始 properties，請先備份後再人工處理。`);
+    } else if (store.hasData && store.isLegacyDispatchStore) {
+      warnings.push(`${store.label} 仍有 legacy chunks，系統下次維護會遷移到年度資料表後清除。`);
+    }
+  });
+
+  return {
+    message: warnings.length
+      ? `儲存狀態需要注意：${warnings.join('；')}`
+      : '儲存狀態正常：正式調派紀錄與操作紀錄已使用年度資料表，Script Properties 僅保留設定與小型狀態。',
+    scriptProperties,
+    dispatchStores,
+    legacyScriptJsonStores,
+    warnings
+  };
+}
+
+function buildDispatchStoreStorageSummary_(label, testMode) {
+  const store = getDispatchRecordStoreKeys_({ testMode });
+  return {
+    label,
+    testMode: Boolean(testMode),
+    recordSheetPrefix: store.recordSheetPrefix,
+    auditLogSheetPrefix: store.auditLogSheetPrefix,
+    records: summarizeAnnualJsonStore_(store.recordSheetPrefix, normalizeStoredDispatchRecord_),
+    auditLogs: summarizeAnnualJsonStore_(store.auditLogSheetPrefix, normalizeDispatchAuditLog_)
+  };
+}
+
+function summarizeAnnualJsonStore_(sheetPrefix, normalizeFn) {
+  const years = getAnnualJsonStoreYears_(sheetPrefix);
+  const yearSummaries = years.map((year) => summarizeAnnualJsonStoreYear_(sheetPrefix, year, normalizeFn));
+  return {
+    sheetPrefix,
+    totalCount: yearSummaries.reduce((sum, item) => sum + item.validCount, 0),
+    invalidRowCount: yearSummaries.reduce((sum, item) => sum + item.invalidCount, 0),
+    totalJsonBytes: yearSummaries.reduce((sum, item) => sum + item.jsonBytes, 0),
+    years: yearSummaries
+  };
+}
+
+function summarizeAnnualJsonStoreYear_(sheetPrefix, year, normalizeFn) {
+  const sheet = getAnnualJsonStoreSheet_(sheetPrefix, year, false);
+  const summary = {
+    year,
+    sheetName: `${sheetPrefix}${year}`,
+    rowCount: 0,
+    validCount: 0,
+    invalidCount: 0,
+    jsonBytes: 0
+  };
+  if (!sheet || sheet.getLastRow() < 2) return summary;
+
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, DISPATCH_ANNUAL_STORE_HEADERS_.length).getDisplayValues();
+  summary.rowCount = values.length;
+  values.forEach((row) => {
+    const raw = String(row[2] || '').trim();
+    if (!raw) return;
+    summary.jsonBytes += estimateUtf8Bytes_(raw);
+    try {
+      const normalized = normalizeFn(JSON.parse(raw));
+      if (normalized) {
+        summary.validCount += 1;
+      } else {
+        summary.invalidCount += 1;
+      }
+    } catch (error) {
+      summary.invalidCount += 1;
+    }
+  });
+  return summary;
+}
+
+function buildScriptPropertiesUsageSummary_() {
+  const properties = PropertiesService.getScriptProperties().getProperties() || {};
+  const entries = Object.keys(properties).map((key) => {
+    const keyBytes = estimateUtf8Bytes_(key);
+    const valueBytes = estimateUtf8Bytes_(properties[key]);
+    return {
+      key,
+      keyBytes,
+      valueBytes,
+      totalBytes: keyBytes + valueBytes
+    };
+  });
+  const totalBytes = entries.reduce((sum, entry) => sum + entry.totalBytes, 0);
+  const status = totalBytes >= APP_CONFIG.scriptPropertiesBlockingBytes
+    ? 'blocked'
+    : (totalBytes >= APP_CONFIG.scriptPropertiesWarningBytes ? 'warning' : 'ok');
+  return {
+    propertyCount: entries.length,
+    totalBytes,
+    totalKb: Math.round((totalBytes / 1024) * 100) / 100,
+    warningBytes: APP_CONFIG.scriptPropertiesWarningBytes,
+    blockingBytes: APP_CONFIG.scriptPropertiesBlockingBytes,
+    status,
+    largestProperties: entries
+      .sort((a, b) => b.totalBytes - a.totalBytes)
+      .slice(0, 10)
+      .map((entry) => ({
+        key: entry.key,
+        valueBytes: entry.valueBytes,
+        totalBytes: entry.totalBytes
+      }))
+  };
+}
+
+function buildScriptJsonStoreSummary_(baseKey, label) {
+  const payload = getScriptJsonStorePayload_(baseKey);
+  const result = {
+    label,
+    baseKey,
+    hasData: payload.hasData,
+    chunkCount: payload.chunkCount,
+    byteSize: payload.rawBytes,
+    missingChunkIndexes: payload.missingChunkIndexes,
+    parseOk: true,
+    itemCount: 0,
+    error: '',
+    isLegacyDispatchStore: [
+      APP_CONFIG.storeKey,
+      APP_CONFIG.auditLogStoreKey,
+      APP_CONFIG.testStoreKey,
+      APP_CONFIG.testAuditLogStoreKey
+    ].includes(baseKey)
+  };
+  if (!payload.hasData) return result;
+
+  const parsed = parseScriptJsonStorePayload_(payload);
+  if (!parsed.ok) {
+    result.parseOk = false;
+    result.error = parsed.error;
+    return result;
+  }
+  result.itemCount = parsed.items.length;
+  return result;
+}
+
 function migrateLegacyDispatchRecordsToAnnualSheets_(store) {
   if (!store || !hasScriptJsonStoreData_(store.storeKey)) return;
-  const legacyRecords = getScriptJsonStore_(store.storeKey)
+  const legacyStore = readScriptJsonStoreArray_(store.storeKey);
+  if (!legacyStore.ok) {
+    console.error(`略過舊調派紀錄遷移，Script Properties chunks 無法安全解析：${legacyStore.error}`);
+    return;
+  }
+  const legacyRecords = legacyStore.items
     .map(normalizeStoredDispatchRecord_)
     .filter(isActiveStoredDispatchRecord_);
   if (legacyRecords.length) {
@@ -3399,7 +3749,12 @@ function migrateLegacyDispatchRecordsToAnnualSheets_(store) {
 
 function migrateLegacyDispatchAuditLogsToAnnualSheets_(store) {
   if (!store || !hasScriptJsonStoreData_(store.auditLogStoreKey)) return;
-  const legacyLogs = getScriptJsonStore_(store.auditLogStoreKey)
+  const legacyStore = readScriptJsonStoreArray_(store.auditLogStoreKey);
+  if (!legacyStore.ok) {
+    console.error(`略過舊操作紀錄遷移，Script Properties chunks 無法安全解析：${legacyStore.error}`);
+    return;
+  }
+  const legacyLogs = legacyStore.items
     .map(normalizeDispatchAuditLog_)
     .filter(Boolean);
   if (legacyLogs.length) {
@@ -3772,6 +4127,28 @@ function buildDispatchAuditRecordSummary_(record) {
   ].filter(Boolean).join('｜');
 }
 
+function buildStationLifecycleAuditLog_(action, station, options) {
+  const settings = options || {};
+  const occurredAt = String(settings.occurredAt || formatTimestamp_(new Date())).trim();
+  const actionDate = occurredAt.slice(0, 10);
+  const stationCode = normalizeOrgCode_(station && station.code);
+  const stationName = String(station && (station.name || stationCode) || '').trim();
+  return buildDispatchAuditLog_(action, {
+    id: `station:${stationCode}:${normalizeAuditAction_(action)}:${occurredAt}`,
+    version: createDispatchRecordVersion_(),
+    stationCode,
+    stationName,
+    originalStationCode: stationCode,
+    originalStationName: stationName,
+    startDate: actionDate,
+    endDate: actionDate,
+    dispatchDays: 0,
+    assignmentStatus: '',
+    demandCount: 1,
+    note: String(settings.note || '').trim()
+  }, settings);
+}
+
 function normalizeAuditAction_(action) {
   const normalized = String(action || '').trim();
   return [
@@ -3779,7 +4156,10 @@ function normalizeAuditAction_(action) {
     'update',
     'delete',
     'create-pending',
-    'assign-pending'
+    'assign-pending',
+    'delete-pending',
+    'create-station',
+    'delete-station'
   ].includes(normalized) ? normalized : 'update';
 }
 
@@ -3790,7 +4170,10 @@ function getDispatchAuditActionLabel_(action) {
     update: '修改調派',
     delete: '刪除調派',
     'create-pending': '建立待指派需求',
-    'assign-pending': '確認待指派人選'
+    'assign-pending': '確認待指派人選',
+    'delete-pending': '刪除待指派需求',
+    'create-station': '新增駐站',
+    'delete-station': '刪除駐站'
   };
   return labels[normalized] || '調派異動';
 }
@@ -3805,7 +4188,9 @@ function normalizeDispatchAuditLog_(log) {
   const action = normalizeAuditAction_(log.action);
   const startDate = String(log.startDate || '').trim();
   const endDate = String(log.endDate || startDate).trim();
-  const dispatchDays = Number(log.dispatchDays || countDateRangeDays_(startDate, endDate));
+  const dispatchDays = typeof log.dispatchDays !== 'undefined'
+    ? Number(log.dispatchDays)
+    : Number(countDateRangeDays_(startDate, endDate));
 
   return {
     id: String(log.id || buildLegacyDispatchRecordVersion_(log) || Utilities.getUuid()).trim(),
@@ -3907,22 +4292,85 @@ function normalizeActiveStoredDispatchRecords_(records) {
 }
 
 function getScriptJsonStore_(baseKey) {
+  const parsed = readScriptJsonStoreArray_(baseKey);
+  if (!parsed.ok) {
+    console.error(`解析儲存資料失敗：${baseKey}：${parsed.error}`);
+    return [];
+  }
+  return parsed.items;
+}
+
+function readScriptJsonStoreArray_(baseKey) {
+  const payload = getScriptJsonStorePayload_(baseKey);
+  if (!payload.hasData) {
+    return { ok: true, items: [], payload };
+  }
+  const parsed = parseScriptJsonStorePayload_(payload);
+  return {
+    ok: parsed.ok,
+    items: parsed.items,
+    error: parsed.error,
+    payload
+  };
+}
+
+function getScriptJsonStorePayload_(baseKey) {
+  const normalizedBaseKey = String(baseKey || '').trim();
   const properties = PropertiesService.getScriptProperties();
-  const chunkCount = Number(properties.getProperty(`${baseKey}:chunkCount`) || 0);
+  const chunkCount = Number(properties.getProperty(`${normalizedBaseKey}:chunkCount`) || 0);
+  const chunks = [];
+  const missingChunkIndexes = [];
   let raw = '';
 
   for (let index = 0; index < chunkCount; index += 1) {
-    raw += properties.getProperty(`${baseKey}:chunk:${index}`) || '';
+    const value = properties.getProperty(`${normalizedBaseKey}:chunk:${index}`);
+    if (value === null || typeof value === 'undefined') {
+      missingChunkIndexes.push(index);
+      chunks.push('');
+      continue;
+    }
+    chunks.push(value);
+    raw += value;
   }
 
-  if (!raw) return [];
+  return {
+    baseKey: normalizedBaseKey,
+    chunkCount,
+    chunks,
+    missingChunkIndexes,
+    raw,
+    rawBytes: estimateUtf8Bytes_(raw),
+    hasData: chunkCount > 0 || Boolean(raw)
+  };
+}
+
+function parseScriptJsonStorePayload_(payload) {
+  if (!payload || !payload.hasData) {
+    return { ok: true, items: [] };
+  }
+  if (payload.missingChunkIndexes && payload.missingChunkIndexes.length) {
+    return {
+      ok: false,
+      items: [],
+      error: `缺少 chunk：${payload.missingChunkIndexes.join('、')}`
+    };
+  }
+  if (!payload.raw) {
+    return { ok: true, items: [] };
+  }
 
   try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(payload.raw);
+    if (!Array.isArray(parsed)) {
+      return { ok: false, items: [], error: 'JSON 內容不是陣列。' };
+    }
+    return { ok: true, items: parsed };
   } catch (error) {
-    console.error(`解析儲存資料失敗：${baseKey}`, error);
-    return [];
+    return {
+      ok: false,
+      items: [],
+      error: error && error.message ? error.message : 'JSON 解析失敗。'
+    };
   }
 }
 
@@ -3935,24 +4383,23 @@ function hasScriptJsonStoreData_(baseKey) {
 function setScriptJsonStore_(baseKey, records, maxRecords) {
   const normalizedRecords = Array.isArray(records) ? records.slice(0, maxRecords) : [];
   const raw = JSON.stringify(normalizedRecords);
-  const chunks = [];
-
-  for (let index = 0; index < raw.length; index += APP_CONFIG.chunkSize) {
-    chunks.push(raw.slice(index, index + APP_CONFIG.chunkSize));
-  }
+  const chunks = splitStringByUtf8Bytes_(raw, APP_CONFIG.chunkSize);
 
   const properties = PropertiesService.getScriptProperties();
   const previousChunkCount = Number(properties.getProperty(`${baseKey}:chunkCount`) || 0);
+  assertScriptJsonStoreWriteCapacity_(properties, baseKey, chunks, previousChunkCount);
   const values = {};
   values[`${baseKey}:chunkCount`] = String(chunks.length);
   chunks.forEach((chunk, index) => {
     values[`${baseKey}:chunk:${index}`] = chunk;
   });
   properties.setProperties(values);
+  invalidateScriptPropertiesCache_();
 
   for (let index = chunks.length; index < previousChunkCount; index += 1) {
     properties.deleteProperty(`${baseKey}:chunk:${index}`);
   }
+  if (chunks.length < previousChunkCount) invalidateScriptPropertiesCache_();
 }
 
 function clearScriptJsonStore_(baseKey) {
@@ -3963,6 +4410,82 @@ function clearScriptJsonStore_(baseKey) {
     properties.deleteProperty(`${baseKey}:chunk:${index}`);
   }
   properties.deleteProperty(`${baseKey}:chunkCount`);
+  invalidateScriptPropertiesCache_();
+}
+
+function assertScriptJsonStoreWriteCapacity_(properties, baseKey, chunks, previousChunkCount) {
+  const nextProperties = properties.getProperties() || {};
+  nextProperties[`${baseKey}:chunkCount`] = String(chunks.length);
+  chunks.forEach((chunk, index) => {
+    const chunkBytes = estimateUtf8Bytes_(chunk);
+    if (chunkBytes > APP_CONFIG.scriptPropertyValueWarningBytes) {
+      throw new Error(`Script Properties 單段資料過大（${chunkBytes} bytes），請先縮短資料或改用資料表儲存。`);
+    }
+    nextProperties[`${baseKey}:chunk:${index}`] = chunk;
+  });
+  for (let index = chunks.length; index < previousChunkCount; index += 1) {
+    delete nextProperties[`${baseKey}:chunk:${index}`];
+  }
+
+  const totalBytes = estimateScriptPropertiesMapBytes_(nextProperties);
+  if (totalBytes >= APP_CONFIG.scriptPropertiesBlockingBytes) {
+    throw new Error(`Script Properties 儲存空間已接近上限（約 ${Math.round(totalBytes / 1024)} KB），請先執行資料遷移或清理舊 properties。`);
+  }
+  if (totalBytes >= APP_CONFIG.scriptPropertiesWarningBytes) {
+    console.warn(`Script Properties 儲存空間接近上限：約 ${Math.round(totalBytes / 1024)} KB。`);
+  }
+}
+
+function estimateScriptPropertiesMapBytes_(properties) {
+  return Object.keys(properties || {}).reduce((sum, key) => (
+    sum + estimateUtf8Bytes_(key) + estimateUtf8Bytes_(properties[key])
+  ), 0);
+}
+
+function splitStringByUtf8Bytes_(value, maxBytes) {
+  const text = String(value || '');
+  const limit = Math.max(1, Number(maxBytes || APP_CONFIG.chunkSize));
+  const chunks = [];
+  let chunk = '';
+  let chunkBytes = 0;
+
+  Array.from(text).forEach((char) => {
+    const charBytes = estimateUtf8Bytes_(char);
+    if (chunk && chunkBytes + charBytes > limit) {
+      chunks.push(chunk);
+      chunk = char;
+      chunkBytes = charBytes;
+      return;
+    }
+    chunk += char;
+    chunkBytes += charBytes;
+  });
+  if (chunk || !chunks.length) chunks.push(chunk);
+  return chunks;
+}
+
+function estimateUtf8Bytes_(value) {
+  const text = String(value || '');
+  let bytes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff && index + 1 < text.length) {
+      const nextCode = text.charCodeAt(index + 1);
+      if (nextCode >= 0xdc00 && nextCode <= 0xdfff) {
+        bytes += 4;
+        index += 1;
+      } else {
+        bytes += 3;
+      }
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
 }
 
 function compareDispatchRecords_(a, b) {
