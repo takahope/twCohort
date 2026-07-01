@@ -1784,7 +1784,7 @@ function applyTestStationOverrides_(source) {
     });
 
   createdStations.forEach((station) => {
-    stationByCode.set(station.code, { ...station });
+    stationByCode.set(station.code, { ...station, isTestCreated: true });
     assignments.push(createTestStationManagerAssignment_(station));
   });
 
@@ -1902,6 +1902,7 @@ function normalizeTestStationRecord_(station) {
     isIsoCertified: Boolean(station.isIsoCertified),
     isExternal,
     isMobile,
+    isTestCreated: true,
     colorKey: isMobile ? (normalizeMobileStationColorKey_(station.colorKey) || buildMobileStationColorKey_(code)) : ''
   };
 }

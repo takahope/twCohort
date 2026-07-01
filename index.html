@@ -3716,7 +3716,7 @@
     function getDeletableStations() {
       if (!(state.viewer && state.viewer.canCreateStation)) return [];
       return getOrderedStations()
-        .filter((station) => station && station.code && isMobileStation(station));
+        .filter((station) => station && station.code && (isMobileStation(station) || Boolean(state.testMode && station.isTestCreated)));
     }
 
     function openDeleteStationModal() {
@@ -3737,7 +3737,9 @@
         el.deleteStationSelect.innerHTML = '<option value="">目前沒有可刪除的系統新增駐站</option>';
         el.deleteStationSelect.disabled = true;
         el.deleteStationSaveBtn.disabled = true;
-        setDeleteStationStatus('目前只允許刪除由本系統新增、且仍未被停用的駐站；正式來源駐站不會列在這裡。');
+        setDeleteStationStatus(state.testMode
+          ? '目前測試模式可刪除測試新增或行動駐站紀錄；正式來源駐站不會列在這裡。'
+          : '目前只允許刪除由本系統新增、且仍未被停用的駐站；正式來源駐站不會列在這裡。');
         return;
       }
       el.deleteStationSelect.innerHTML = stations.map((station) => (
